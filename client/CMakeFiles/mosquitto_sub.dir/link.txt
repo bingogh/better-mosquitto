@@ -1,0 +1,1 @@
+/usr/bin/cc   -Wl,-search_paths_first -Wl,-headerpad_max_install_names   CMakeFiles/mosquitto_sub.dir/sub_client.c.o  -o mosquitto_sub  -L/Users/admin/code/better-mosquitto/lib  ../lib/libmosquitto.1.2.3.dylib /usr/lib/libssl.dylib /usr/lib/libcrypto.dylib -lpthread -Wl,-rpath,/Users/admin/code/better-mosquitto/lib 
