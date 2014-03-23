@@ -43,6 +43,7 @@
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
+#include <stdlib.h>
 
 #include <errno.h>
 #include <signal.h>
@@ -70,7 +71,6 @@ extern int g_clients_expired;
 #endif
 
 static void loop_handle_errors(struct mosquitto_db *db, struct pollfd *pollfds);
-/* static void loop_handle_reads_writes(struct mosquitto_db *db, struct pollfd *pollfds); */
 static void loop_handle_reads_writes(struct mosquitto_db *db, struct kevent *chlist);
 //hack for apple
 void diep(const char *s);
@@ -116,8 +116,8 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
 			pollfd_count = listensock_count + db->context_count;
 
       /* pollfds = _mosquitto_realloc(pollfds, sizeof(struct pollfd)*pollfd_count); */
-			chlist = _mosquitto_realloc(chlist, sizeof(struct kevent)*pollfd_count);
-			evlist = _mosquitto_realloc(evlist, sizeof(struct kevent)*pollfd_count);
+			chlist = _mosquitto_malloc(sizeof(struct kevent)*pollfd_count);
+			evlist = _mosquitto_malloc(sizeof(struct kevent)*pollfd_count);
 
 			if(!chlist||!evlist){
 				_mosquitto_log_printf(NULL, MOSQ_LOG_ERR, "Error: Out of memory.");
@@ -328,7 +328,7 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
 			/* loop_handle_errors(db, pollfds); */
       diep("opps,there is errors");
 		}else{
-			/* loop_handle_reads_writes(db, pollfds); */
+      //TODO 2014.03.24 这里的socket读写事件有点问题，整个的事件kqueue事件循环逻辑要调整下....LOL
 			loop_handle_reads_writes(db, evlist);
 
 			for(i=0; i<listensock_count; i++){
@@ -338,7 +338,7 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
         }
         if(evlist[i].flags & EV_ERROR){
           fprintf(stderr, "EVE_ERROR: %s\n", strerror(evlist[i].data));
-          exist(EXIT_FAILURE);
+          exit(EXIT_FAILURE);
         }
         while(mqtt3_socket_accept(db, listensock[i]) != -1){ //TODO 查看下这里的接收新的socket请求的实现
         }
@@ -457,10 +457,10 @@ static void loop_handle_reads_writes(struct mosquitto_db *db, struct kevent *evl
       if(db->contexts[i] && db->contexts[i]->sock != INVALID_SOCKET){
         assert(evlist[db->contexts[i]->pollfd_index].ident == db->contexts[i]->sock);
 #ifdef WITH_TLS
-        if(evlist[db->contexts[i]->pollfd_index].flags & EVLIST_READ ||
+        if(evlist[db->contexts[i]->pollfd_index].flags & EVFILT_READ ||
            (db->contexts[i]->ssl && db->contexts[i]->state == mosq_cs_new)){
 #else
-          if(evlist[db->contexts[i]->pollfd_index].flags & EVLIST_READ){
+          if(evlist[db->contexts[i]->pollfd_index].flags & EVFILT_READ){
 #endif
             if(_mosquitto_packet_read(db, db->contexts[i])){
               if(db->config->connection_messages == true){
