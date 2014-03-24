@@ -44,7 +44,6 @@ extern unsigned long g_msgs_dropped;
 #endif
 
 
-// TODO check this one
 int mqtt3_db_open(struct mqtt3_config *config, struct mosquitto_db *db)
 {
 	int rc = 0;
@@ -102,6 +101,7 @@ int mqtt3_db_open(struct mqtt3_config *config, struct mosquitto_db *db)
 
 	db->unpwd = NULL;
 
+  // 如果之前存储过信息，就把它们都拿出来
 #ifdef WITH_PERSISTENCE
 	if(config->persistence && config->persistence_filepath){
 		if(mqtt3_db_restore(db)) return 1;
@@ -650,6 +650,7 @@ int mqtt3_db_message_timeout_check(struct mosquitto_db *db, unsigned int timeout
 	struct mosquitto *context;
 	struct mosquitto_client_msg *msg;
 
+  // 重试时间
 	threshold = mosquitto_time() - timeout;
 
 	for(i=0; i<db->context_count; i++){

@@ -76,7 +76,14 @@ static int tls_ex_index_listener = -1;
 extern unsigned int g_socket_connections;
 #endif
 
-int mqtt3_socket_accept(struct mosquitto_db *db, int listensock)
+// hack for apple
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
+#include <stdlib.h>
+
+
+int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq) //试着在accpet的时候，监听新的socket
 {
 	int i;
 	int j;
@@ -94,6 +101,9 @@ int mqtt3_socket_accept(struct mosquitto_db *db, int listensock)
 	struct request_info wrap_req;
 	char address[1024];
 #endif
+
+  // hack for apple
+  struct kevent change;
 
 	new_sock = accept(listensock, NULL, 0);
 	if(new_sock == INVALID_SOCKET) return -1;
@@ -227,6 +237,11 @@ int mqtt3_socket_accept(struct mosquitto_db *db, int listensock)
 #ifdef WITH_WRAP
 	}
 #endif
+
+  // hack for apple
+  EV_SET(&change, new_sock, EVFILT_READ, EV_ADD, 0, 0, NULL);
+  kevent(kq, &change, 1, NULL, 0, NULL);
+
 	return new_sock;
 }
 

@@ -348,7 +348,8 @@ int _mosquitto_send_suback(struct mosquitto *context, uint16_t mid, uint32_t pay
 /* ============================================================
  * Network functions
  * ============================================================ */
-int mqtt3_socket_accept(struct mosquitto_db *db, int listensock);
+/* int mqtt3_socket_accept(struct mosquitto_db *db, int listensock); */
+int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq);
 int mqtt3_socket_listen(struct _mqtt3_listener *listener);
 int _mosquitto_socket_get_address(int sock, char *buf, int len);
 
