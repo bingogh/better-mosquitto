@@ -83,7 +83,7 @@ static int _subs_process(struct mosquitto_db *db, struct _mosquitto_subhier *hie
 	struct _mosquitto_subleaf *leaf;
 	bool client_retain;
 
-	leaf = hier->subs;
+	leaf = hier->subs; //当前节点下面订阅的客户端
 
   //如果retain为true，那么意思是这条消息以后任何人上线，都要给他发一次。其实就等于"每日推荐"一样
 	if(retain && set_retain){
@@ -111,7 +111,7 @@ static int _subs_process(struct mosquitto_db *db, struct _mosquitto_subhier *hie
 		}else{
 			hier->retained = NULL;
 		}
-	}
+	} // end of retain && set_retain
 
   // source_id
 	while(source_id && leaf){
@@ -122,7 +122,7 @@ static int _subs_process(struct mosquitto_db *db, struct _mosquitto_subhier *hie
 		}
 
 		/* Check for ACL topic access. */
-		rc2 = mosquitto_acl_check(db, leaf->context, topic, MOSQ_ACL_READ);
+		rc2 = mosquitto_acl_check(db, leaf->context, topic, MOSQ_ACL_READ); //TODO 看看权限设置的实现
 		if(rc2 == MOSQ_ERR_ACL_DENIED){
 			leaf = leaf->next;
 			continue;
@@ -157,13 +157,16 @@ static int _subs_process(struct mosquitto_db *db, struct _mosquitto_subhier *hie
 				 * retain should be false. */
 				client_retain = false;
 			}
+
+      printf("a message is going to be inserted\n");
       //将一条消息插入到context->msg链表后面，设置相关的状态。然后记录这条消息给哪些人发送过等
 			if(mqtt3_db_message_insert(db, leaf->context, mid, mosq_md_out, msg_qos, client_retain, stored) == 1) rc = 1;
+
 		}else{
 			rc = 1;
 		}
 		leaf = leaf->next;
-	}
+	} // end of source_id && leaf
 	return rc;
 }
 
@@ -184,7 +187,7 @@ static int _sub_topic_tokenise(const char *subtopic, struct _sub_token **topics)
 	if(!local_subtopic) return MOSQ_ERR_NOMEM;
 	real_subtopic = local_subtopic; //记住头部
 
-	if(local_subtopic[0] == '/'){ //第一个斜杠也算
+	if(local_subtopic[0] == '/'){ //第一个字符是斜杠的话算一个话题，
 		new_topic = _mosquitto_malloc(sizeof(struct _sub_token));
 		if(!new_topic) goto cleanup;
 		new_topic->next = NULL;
@@ -234,13 +237,15 @@ cleanup:
 }
 
 static int _sub_add(struct mosquitto_db *db, struct mosquitto *context, int qos, struct _mosquitto_subhier *subhier, struct _sub_token *tokens)
-{//递归的查找参数tokens链表代表的路径段，找到其最终的订阅位置然后放到subs链表里面,返回MOSQ_ERR_SUCCESS表示成功，-1表示重复订阅
+{//递归的查找参数tokens链表代表的路径段，并在查找的过程中生成不存在的订阅节点
+  // 找到其最终的订阅位置，放到subs链表里面,返回MOSQ_ERR_SUCCESS表示成功，-1表示重复订阅
 
 	struct _mosquitto_subhier *branch, *last = NULL;
 	struct _mosquitto_subleaf *leaf, *last_leaf;
 
-	if(!tokens){ //tokens为空，只需要将当前订阅放到当前subhier->subs链表后面即可
+	if(!tokens){ //tokens为空，只需要将当前订阅放到当前主题的订阅链表下面，即subhier->subs链表后面
 
+    // context为空相当于一个hack，就是单纯为了创建订阅节点
 		if(context){
 			leaf = subhier->subs; //遍历这个主题下面的所有客户端，然后把我们的客户端加进去
 			last_leaf = NULL;
@@ -353,7 +358,6 @@ static int _sub_remove(struct mosquitto_db *db, struct mosquitto *context, struc
 }
 
 
-// search for what???
 static int _sub_search(struct mosquitto_db *db, struct _mosquitto_subhier *subhier, struct _sub_token *tokens, const char *source_id, const char *topic, int qos, int retain, struct mosquitto_msg_store *stored, bool set_retain)
 {
 	/* FIXME - need to take into account source_id if the client is a bridge */
@@ -377,6 +381,8 @@ static int _sub_search(struct mosquitto_db *db, struct _mosquitto_subhier *subhi
 				flag = -1;
 			}
 
+      //在当前这一个层级下面，找到了对应的那个话题，然后我们的tokens也匹配完了
+      //所以在这一个地方开始我们的subs处理
 			if(!tokens->next){
 				_subs_process(db, branch, source_id, topic, qos, retain, stored, sr);
 			}
@@ -487,8 +493,9 @@ int mqtt3_sub_remove(struct mosquitto_db *db, struct mosquitto *context, const c
 	return rc;
 }
 
+// 把消息插入客户端自己维护的消息队列里面
 int mqtt3_db_messages_queue(struct mosquitto_db *db, const char *source_id, const char *topic, int qos, int retain, struct mosquitto_msg_store *stored)
-{//给消息排队？
+{
 	int rc = 0;
 	int tree;
 	struct _mosquitto_subhier *subhier;
@@ -497,6 +504,7 @@ int mqtt3_db_messages_queue(struct mosquitto_db *db, const char *source_id, cons
 	assert(db);
 	assert(topic);
 
+  // 判断话题类型，解构话题成分
 	if(!strncmp(topic, "$SYS/", 5)){
 		tree = 2;
 		if(_sub_topic_tokenise(topic+5, &tokens)) return 1;

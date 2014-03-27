@@ -60,6 +60,7 @@ int _mosquitto_handle_pingreq(struct mosquitto *mosq)
 	return _mosquitto_send_pingresp(mosq);
 }
 
+// TODO 为啥还需要这个处理pingresp的处理呢？
 int _mosquitto_handle_pingresp(struct mosquitto *mosq)
 {
 	assert(mosq);
@@ -263,4 +264,3 @@ int _mosquitto_handle_unsuback(struct mosquitto *mosq)
 
 	return MOSQ_ERR_SUCCESS;
 }
-

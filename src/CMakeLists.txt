@@ -45,22 +45,22 @@ if (${USE_LIBWRAP} STREQUAL ON)
 endif (${USE_LIBWRAP} STREQUAL ON)
 
 option(INC_DB_UPGRADE
-	"Include database upgrade support? (recommended)" ON)
+	"Include database upgrade support? (recommended)" OFF)
 
 option(INC_MEMTRACK
-	"Include memory tracking support?" ON)
+	"Include memory tracking support?" OFF)
 if (${INC_MEMTRACK} STREQUAL ON)
 	add_definitions("-DWITH_MEMORY_TRACKING")
 endif (${INC_MEMTRACK} STREQUAL ON)
 
 option(WITH_PERSISTENCE
-	"Include persistence support?" ON)
+	"Include persistence support?" OFF)
 if (${WITH_PERSISTENCE} STREQUAL ON)
 	add_definitions("-DWITH_PERSISTENCE")
 endif (${WITH_PERSISTENCE} STREQUAL ON)
 
 option(WITH_SYS_TREE
-	"Include $SYS tree support?" ON)
+	"Include $SYS tree support?" OFF)
 if (${WITH_SYS_TREE} STREQUAL ON)
 	add_definitions("-DWITH_SYS_TREE")
 endif (${WITH_SYS_TREE} STREQUAL ON)
@@ -102,4 +102,3 @@ endif (${WITH_TLS} STREQUAL ON)
 if (UNIX)
 	install(CODE "EXEC_PROGRAM(/sbin/ldconfig)")
 endif (UNIX)
-

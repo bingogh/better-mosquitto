@@ -227,6 +227,7 @@ int mqtt3_db_message_delete(struct mosquitto *context, uint16_t mid, enum mosqui
 	return MOSQ_ERR_SUCCESS;
 }
 
+// 把消息插入到传入的客户端的msg链表里面
 int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, uint16_t mid, enum mosquitto_msg_direction dir, int qos, bool retain, struct mosquitto_msg_store *stored)
 {
 	struct mosquitto_client_msg *msg, *tail = NULL;
@@ -248,7 +249,7 @@ int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, 
 	 * case for SUBSCRIPTION with multiple subs in so is a minor concern.
 	 */
 	if(db->config->allow_duplicate_messages == false
-     && dir == mosq_md_out && retain == false && stored->dest_ids){ //对stored结构？？
+     && dir == mosq_md_out && retain == false && stored->dest_ids){
 
 		for(i=0; i<stored->dest_id_count; i++){
 			if(!strcmp(stored->dest_ids[i], context->id)){
@@ -287,11 +288,14 @@ int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, 
   // 对客户端在线的处理
 	if(context->sock != INVALID_SOCKET){
 
+    printf ("a message is being processed\n");
+
     //连接有效，那么如果总排队消息等没超过限制的话，那么根据qos级别，输入还是输出，设置其对应的state状态
 		if(qos == 0 || max_inflight == 0 || msg_count < max_inflight){
 			if(dir == mosq_md_out){
 				switch(qos){
 					case 0:
+            printf("it should be qos0 state\n");
 						state = mosq_ms_publish_qos0;
 						break;
 					case 1:
@@ -324,7 +328,7 @@ int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, 
 			return 2;
 		}
 
-	}else{
+	}else{ // else of context->cotnext == Invalid_socket
 
     // 客户端不在线
 		if(max_queued > 0 && msg_count >= max_queued){ //当前消息数已经大于最大排队消息数，直接drop掉
@@ -336,7 +340,6 @@ int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, 
       // 否则把消息扔到排队队列里面
 			state = mosq_ms_queued;
 		}
-
 	}
 	assert(state != mosq_ms_invalid);
 
@@ -347,6 +350,7 @@ int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, 
 #endif
 
 
+  printf("now create a msg struct");
   //构造一个消息包
 	msg = _mosquitto_malloc(sizeof(struct mosquitto_client_msg));
 	if(!msg) return MOSQ_ERR_NOMEM;

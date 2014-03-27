@@ -1,6 +1,0 @@
-/Users/admin/code/better-mosquitto/lib/CMakeFiles/libmosquitto.dir
-/Users/admin/code/better-mosquitto/src/CMakeFiles/mosquitto.dir
-/Users/admin/code/better-mosquitto/src/CMakeFiles/mosquitto_passwd.dir
-/Users/admin/code/better-mosquitto/client/CMakeFiles/mosquitto_pub.dir
-/Users/admin/code/better-mosquitto/client/CMakeFiles/mosquitto_sub.dir
-/Users/admin/code/better-mosquitto/lib/cpp/CMakeFiles/mosquittopp.dir

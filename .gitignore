@@ -16,3 +16,14 @@
 *.exe
 *.out
 *.app
+
+# cmake realte
+*.internal
+*.includecache
+src/CMakeFiles/
+client/CMakeFiles/
+lib/CMakeFiles/
+lib/cpp/CMakeFiles/
+CMakeFiles/
+CMakeCache.txt
+Makefile

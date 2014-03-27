@@ -36,7 +36,7 @@ else (WIN32)
 	else (${CMAKE_INSTALL_PREFIX} STREQUAL /usr)
 		set (SYSCONFDIR etc/mosquitto)
 	endif (${CMAKE_INSTALL_PREFIX} STREQUAL /usr)
-	
+
 	set (LIBDIR lib${LIB_SUFFIX})
 	set (INCLUDEDIR include)
 	set (DATAROOTDIR share)
@@ -45,9 +45,9 @@ else (WIN32)
 endif (WIN32)
 
 option(WITH_TLS
-	"Include SSL/TLS support?" ON)
+	"Include SSL/TLS support?" OFF)
 option(WITH_TLS_PSK
-	"Include TLS-PSK support (requires WITH_TLS)?" ON)
+	"Include TLS-PSK support (requires WITH_TLS)?" OFF)
 if (${WITH_TLS} STREQUAL ON)
 	find_package(OpenSSL REQUIRED)
 	add_definitions("-DWITH_TLS")

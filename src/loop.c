@@ -70,8 +70,10 @@ extern int run;
 extern int g_clients_expired;
 #endif
 
-static void loop_handle_errors(struct mosquitto_db *db, struct kevent *);
+/* static void loop_handle_errors(struct mosquitto_db *db, struct kevent *); */
 static void loop_handle_reads_writes(struct mosquitto_db *db, struct kevent);
+static void do_disconnect(struct mosquitto_db *db, int fd);
+
 //hack for apple
 void diep(const char *s);
 int conn_delete(int fd);
@@ -113,6 +115,10 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
   int _listensock = listensock[0];
   listensock_count = 1;
 
+  // FIXME
+	while(run){
+
+    // TODO 优化这里的kevent代码*********************************************************************************************************************************************************************************************************
   pollfd_count = listensock_count + db->context_count; //context_count是会改变的，这里要根据数量的多少重新申请
 
   chlist = _mosquitto_malloc(sizeof(struct kevent)*pollfd_count);
@@ -284,9 +290,8 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
   //register events
   if((kq = kqueue()) == -1)
     diep("kqueue()");
-  fdcount = kevent(kq, chlist, kevent_index, NULL, 0, NULL);
-
-	while(run){
+  kevent(kq, chlist, kevent_index, NULL, 0, NULL);
+  // ************************************************************************************************************************************************************
 
 #ifdef WITH_SYS_TREE
     // TODO check this to see how send message work
@@ -316,20 +321,28 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
 
         if(evlist[i].flags & EV_EOF){
           printf("disconnect\n");
-          do_disconnect(db, i);
-          /* conn_delete(fd); */
+          do_disconnect(db, fd);
+          continue;
         }
 
         if(evlist[i].flags & EV_ERROR){
           fprintf(stderr, "EVE_ERROR: %s\n", strerror(evlist[i].data));
-          do_disconnect(db, i);
-          /* conn_delete(fd); */
+          do_disconnect(db, fd);
+          continue;
         }
 
         // 接受新的客户端请求
         if ( evlist[i].ident == _listensock )
           {
             while( mqtt3_socket_accept(db, _listensock, kq) != -1){
+              // 每次接收新的socket连接的时候，会根据db->contexts的负载情况，决定是否创建的context空间
+              // 看loop_handle_reads_writes的handle_connect的时候，发现有些重复的赋值情况，
+              // 但从客户端和服务器的连接顺序来看，这样的安排其实也合理。因为这个时候刚完成socket连接的3次握手，
+              // 标识客户端id的数据包还没发过来，也就无法做标识来避免创建新的context空间了。但是context毕竟只是创建，
+              // 但很少进行删除操作，所以不担心这样会影响性能什么的。
+
+              // 我猜想能不能有一种攻击，狂让你的客户端创建新的context，挤爆内存....不过这个可以从很多方面去做限制。
+              // 我看到作者的一种做法是每个address:port对都提供了最大连接数的限制，倒是可以根据这个防范攻击。
             }
           }
         else{
@@ -385,8 +398,21 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
   return MOSQ_ERR_SUCCESS;
 }
 
-static void do_disconnect(struct mosquitto_db *db, int context_index)
+static void do_disconnect(struct mosquitto_db *db, int fd)
 {
+
+  int context_index=0;
+
+  //TODO better handle context sock disconn
+  for (int i = 0; i < db->context_count; ++i)
+    {
+      if (db->contexts[context_index]->sock == fd)
+        {
+          break;
+        }
+      context_index++;
+    }
+
   if(db->config->connection_messages == true){
     if(db->contexts[context_index]->state != mosq_cs_disconnecting){
       _mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Socket error on client %s, disconnecting.", db->contexts[context_index]->id);
@@ -400,23 +426,21 @@ static void do_disconnect(struct mosquitto_db *db, int context_index)
 /* Error ocurred, probably an fd has been closed.
  * Loop through and check them all.
  */
- static void loop_handle_errors(struct mosquitto_db *db, struct kevent *evlist)
-{
-  int i;
-
-  // 处理客户端socket的错误事件，清理资源，设置状态
-  // 不会把整个结构体干掉
-  for(i=0; i<db->context_count; i++)
-    {
-    if( db->contexts[i] && db->contexts[i]->sock != INVALID_SOCKET )
-      {
-        //????
-      }
-      if( evlist[i].flags & EV_ERROR){
-        do_disconnect(db, i);
-      }
-    }
-}
+/* static void loop_handle_errors(struct mosquitto_db *db, struct kevent *evlist) */
+/* { */
+/*   int i; */
+/* //处理客户端socket的错误事件，清理资源，设置状态 */
+/*   // 不会把整个结构体干掉 */
+/*   for(i=0; i<db->context_count; i++) */
+/*     { */
+/*       if( db->contexts[i] && db->contexts[i]->sock != INVALID_SOCKET ) */
+/*         { */
+/*           if( evlist[i].flags & EV_ERROR){ */
+/*             do_disconnect(db, ); */
+/*           } */
+/*         } */
+/*     } */
+/* } */
 
 
 // 算法复杂度O(n)
@@ -458,7 +482,7 @@ static void loop_handle_reads_writes(struct mosquitto_db *db, struct kevent evnt
 #else
         if(evnt.filter == EVFILT_READ){
 #endif
-          if(_mosquitto_packet_read(db, db->contexts[i])){
+          if(_mosquitto_packet_read(db, db->contexts[i])){ //FIXIME 这里是强制使用了WITH_BROKER的特性了，那是用define宏意义就不大了
             if(db->config->connection_messages == true){
               if(db->contexts[i]->state != mosq_cs_disconnecting){
                 _mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Socket read error on client %s, disconnecting.", db->contexts[i]->id);
@@ -477,7 +501,7 @@ static void loop_handle_reads_writes(struct mosquitto_db *db, struct kevent evnt
       // 其他错误，直接断开连接
       if(db->contexts[i] && db->contexts[i]->sock != INVALID_SOCKET){
         if(evnt.flags & (EV_ERROR)){
-          do_disconnect(db, i);
+          do_disconnect(db, db->contexts[i]->sock);
         }
       }
 

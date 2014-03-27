@@ -1,30 +1,30 @@
 /*
-Copyright (c) 2009-2013 Roger Light <roger@atchoo.org>
-All rights reserved.
+  Copyright (c) 2009-2013 Roger Light <roger@atchoo.org>
+  All rights reserved.
 
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
 
-1. Redistributions of source code must retain the above copyright notice,
-   this list of conditions and the following disclaimer.
-2. Redistributions in binary form must reproduce the above copyright
-   notice, this list of conditions and the following disclaimer in the
-   documentation and/or other materials provided with the distribution.
-3. Neither the name of mosquitto nor the names of its
-   contributors may be used to endorse or promote products derived from
-   this software without specific prior written permission.
+  1. Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+  2. Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+  3. Neither the name of mosquitto nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGE.
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include <assert.h>
@@ -71,12 +71,12 @@ POSSIBILITY OF SUCH DAMAGE.
 #ifdef WITH_BROKER
 #  include <mosquitto_broker.h>
 #  ifdef WITH_SYS_TREE
-   extern uint64_t g_bytes_received;
-   extern uint64_t g_bytes_sent;
-   extern unsigned long g_msgs_received;
-   extern unsigned long g_msgs_sent;
-   extern unsigned long g_pub_msgs_received;
-   extern unsigned long g_pub_msgs_sent;
+extern uint64_t g_bytes_received;
+extern uint64_t g_bytes_sent;
+extern unsigned long g_msgs_received;
+extern unsigned long g_msgs_sent;
+extern unsigned long g_pub_msgs_received;
+extern unsigned long g_pub_msgs_sent;
 #  endif
 #else
 #  include <read_handle.h>
@@ -202,8 +202,8 @@ int _mosquitto_socket_close(struct mosquitto *mosq)
 
 #ifdef REAL_WITH_TLS_PSK
 static unsigned int psk_client_callback(SSL *ssl, const char *hint,
-		char *identity, unsigned int max_identity_len,
-		unsigned char *psk, unsigned int max_psk_len)
+                                        char *identity, unsigned int max_identity_len,
+                                        unsigned char *psk, unsigned int max_psk_len)
 {
 	struct mosquitto *mosq;
 	int len;
@@ -300,7 +300,7 @@ int _mosquitto_try_connect(const char *host, uint16_t port, int *sock, const cha
 #endif
 		if(rc == 0 || errno == EINPROGRESS || errno == COMPAT_EWOULDBLOCK){
 			if(blocking){
-			/* Set non-blocking */
+        /* Set non-blocking */
 #ifndef WIN32
 				opt = fcntl(*sock, F_GETFL, 0);
 				if(opt == -1 || fcntl(*sock, F_SETFL, opt | O_NONBLOCK) == -1){
@@ -390,8 +390,8 @@ int _mosquitto_socket_connect(struct mosquitto *mosq, const char *host, uint16_t
 		SSL_CTX_set_options(mosq->ssl_ctx, SSL_OP_NO_COMPRESSION);
 #endif
 #ifdef SSL_MODE_RELEASE_BUFFERS
-			/* Use even less memory per SSL connection. */
-			SSL_CTX_set_mode(mosq->ssl_ctx, SSL_MODE_RELEASE_BUFFERS);
+    /* Use even less memory per SSL connection. */
+    SSL_CTX_set_mode(mosq->ssl_ctx, SSL_MODE_RELEASE_BUFFERS);
 #endif
 
 		if(mosq->tls_ciphers){
@@ -545,18 +545,20 @@ void _mosquitto_write_bytes(struct _mosquitto_packet *packet, const void *bytes,
 	packet->pos += count;
 }
 
-int _mosquitto_read_string(struct _mosquitto_packet *packet, char **str)
+int _mosquitto_read_string(struct _mosquitto_packet *packet, char **str) //为什么这里要使用指针的指针？
 {
 	uint16_t len;
 	int rc;
 
 	assert(packet);
-	rc = _mosquitto_read_uint16(packet, &len); //看来长度都是固定好的了
+	rc = _mosquitto_read_uint16(packet, &len); //获取协议字段的长度，格式有点类似 长度:内容;长度:内容....
 	if(rc) return rc;
 
+  // 作者在网络编程的修养就体现在这种小细节里面了
+  // 比如对可能的字节长度错误判断，很犀利
 	if(packet->pos+len > packet->remaining_length) return MOSQ_ERR_PROTOCOL;
 
-	*str = _mosquitto_calloc(len+1, sizeof(char));
+	*str = _mosquitto_calloc(len+1, sizeof(char)); //多分配一字节来做字符串结束符？
 	if(*str){
 		memcpy(*str, &(packet->payload[packet->pos]), len);
 		packet->pos += len;
@@ -603,7 +605,6 @@ void _mosquitto_write_uint16(struct _mosquitto_packet *packet, uint16_t word)
 ssize_t _mosquitto_net_read(struct mosquitto *mosq, void *buf, size_t count)
 {
 
-  //
 #ifdef WITH_TLS
 	int ret;
 	int err;
@@ -613,7 +614,6 @@ ssize_t _mosquitto_net_read(struct mosquitto *mosq, void *buf, size_t count)
 	assert(mosq);
 	errno = 0;
 
-  /// TLS =.=
 #ifdef WITH_TLS
 	if(mosq->ssl){
 		ret = SSL_read(mosq->ssl, buf, count);
@@ -638,13 +638,12 @@ ssize_t _mosquitto_net_read(struct mosquitto *mosq, void *buf, size_t count)
 		return (ssize_t )ret;
 	}else{
 		/* Call normal read/recv */
-
 #endif
 
 #ifndef WIN32
-	return read(mosq->sock, buf, count);
+    return read(mosq->sock, buf, count);
 #else
-	return recv(mosq->sock, buf, count, 0);
+    return recv(mosq->sock, buf, count, 0);
 #endif
 
 #ifdef WITH_TLS
@@ -691,9 +690,9 @@ ssize_t _mosquitto_net_write(struct mosquitto *mosq, void *buf, size_t count)
 #endif
 
 #ifndef WIN32
-	return write(mosq->sock, buf, count);
+    return write(mosq->sock, buf, count);
 #else
-	return send(mosq->sock, buf, count, 0);
+    return send(mosq->sock, buf, count, 0);
 #endif
 
 #ifdef WITH_TLS
@@ -745,10 +744,10 @@ int _mosquitto_packet_write(struct mosquitto *mosq)
 				}else{
 					pthread_mutex_unlock(&mosq->current_out_packet_mutex);
 					switch(errno){
-						case COMPAT_ECONNRESET:
-							return MOSQ_ERR_CONN_LOST;
-						default:
-							return MOSQ_ERR_ERRNO;
+          case COMPAT_ECONNRESET:
+            return MOSQ_ERR_CONN_LOST;
+          default:
+            return MOSQ_ERR_ERRNO;
 					}
 				}
 			}
@@ -799,7 +798,7 @@ int _mosquitto_packet_write(struct mosquitto *mosq)
 #ifdef WITH_BROKER
 int _mosquitto_packet_read(struct mosquitto_db *db, struct mosquitto *mosq)
 #else
-int _mosquitto_packet_read(struct mosquitto *mosq)
+  int _mosquitto_packet_read(struct mosquitto *mosq)
 #endif
 {
 	uint8_t byte;
@@ -809,6 +808,7 @@ int _mosquitto_packet_read(struct mosquitto *mosq)
 	if(!mosq) return MOSQ_ERR_INVAL;
 	if(mosq->sock == INVALID_SOCKET) return MOSQ_ERR_NO_CONN;
 
+  printf("in packet read\n");
 
   /* This gets called if pselect() indicates that there is network data
 	 * available - ie. at least one byte.  What we do depends on what data we
@@ -824,19 +824,16 @@ int _mosquitto_packet_read(struct mosquitto *mosq)
 	 * After all data is read, send to _mosquitto_handle_packet() to deal with.
 	 * Finally, free the memory and reset everything to starting conditions.
 	 */
-  // 貌似command是初始连接的时候会填进去的？？
+
+  //第一步，读取fixed header第一个字节command
 	if(!mosq->in_packet.command){
-
-
-    //第一步，读取fixed header第一个字节command
-    // 吐槽：C的语法简直不是写给人看的！！！！！加了一堆判定、内存检查、释放一坨东西，搞得整个程序的语意看起来非常的凌乱....
 		read_length = _mosquitto_net_read(mosq, &byte, 1);
-   		if(read_length == 1){
+    if(read_length == 1){
 			mosq->in_packet.command = byte;
 #ifdef WITH_BROKER
-#  ifdef WITH_SYS_TREE
+  #ifdef WITH_SYS_TREE
 			g_bytes_received++;
-#  endif
+  #endif
 			/* Clients must send CONNECT as their first command. */
 			if(!(mosq->bridge) && mosq->state == mosq_cs_new && (byte&0xF0) != CONNECT) return MOSQ_ERR_PROTOCOL;
 #endif
@@ -849,10 +846,10 @@ int _mosquitto_packet_read(struct mosquitto *mosq)
 				return MOSQ_ERR_SUCCESS;
 			}else{
 				switch(errno){
-					case COMPAT_ECONNRESET:
-						return MOSQ_ERR_CONN_LOST;
-					default:
-						return MOSQ_ERR_ERRNO;
+        case COMPAT_ECONNRESET:
+          return MOSQ_ERR_CONN_LOST;
+        default:
+          return MOSQ_ERR_ERRNO;
 				}
 			}
 		}
@@ -860,24 +857,25 @@ int _mosquitto_packet_read(struct mosquitto *mosq)
 
 
   // 读取后面的数据长度字段。最多用4个字节来表示内容的长度
-  //
-	if(!mosq->in_packet.have_remaining){ //还没读取到remaining length
+  //还没读取到remaining length
+	if(!mosq->in_packet.have_remaining){
 		/* Read remaining
 		 * Algorithm for decoding taken from pseudo code at
 		 * http://publib.boulder.ibm.com/infocenter/wmbhelp/v6r0m0/topic/com.ibm.etools.mft.doc/ac10870_.htm
 		 */
 		do{
-			read_length = _mosquitto_net_read(mosq, &byte, 1);
+			read_length = _mosquitto_net_read(mosq, &byte, 1); //packet的第二个字节表示的是剩下的包长度
 			if(read_length == 1){
 				mosq->in_packet.remaining_count++;
 				/* Max 4 bytes length for remaining length as defined by protocol.
 				 * Anything more likely means a broken/malicious client.
 				 */
-				if(mosq->in_packet.remaining_count > 4) return MOSQ_ERR_PROTOCOL;
+				if(mosq->in_packet.remaining_count > 4) return MOSQ_ERR_PROTOCOL; //很喜欢C里面的一些自定义错误类型，超棒，语义也很清晰;只是不知道在对应处理的地方是怎么对错误类型进行处理的？
 
 #if defined(WITH_BROKER) && defined(WITH_SYS_TREE)
 				g_bytes_received++;
 #endif
+        //这里的长度计算是反序的？
 				mosq->in_packet.remaining_length += (byte & 127) * mosq->in_packet.remaining_mult;
 				mosq->in_packet.remaining_mult *= 128;
 			}else{
@@ -886,20 +884,20 @@ int _mosquitto_packet_read(struct mosquitto *mosq)
 				errno = WSAGetLastError();
 #endif
 				if(errno == EAGAIN || errno == COMPAT_EWOULDBLOCK){
-					return MOSQ_ERR_SUCCESS;
+					return MOSQ_ERR_SUCCESS; //长度暂时没取完，因为信息已经保存到context空间了，等待下次的read事件再读完剩下的内容
 				}else{
 					switch(errno){
-						case COMPAT_ECONNRESET:
-							return MOSQ_ERR_CONN_LOST;
-						default:
-							return MOSQ_ERR_ERRNO;
+          case COMPAT_ECONNRESET:
+            return MOSQ_ERR_CONN_LOST;
+          default:
+            return MOSQ_ERR_ERRNO;
 					}
 				}
 			}
 		}while((byte & 128) != 0); // 1XXX XXXX表示后面的字节仍然是代表长度的
 
 		if(mosq->in_packet.remaining_length > 0){
-			mosq->in_packet.payload = _mosquitto_malloc(mosq->in_packet.remaining_length*sizeof(uint8_t));
+			mosq->in_packet.payload = _mosquitto_malloc(mosq->in_packet.remaining_length*sizeof(uint8_t)); // 按照需要分配内存空间，最大不超过256MB.长度计算参考 http://www.blogjava.net/yongboy/archive/2014/02/07/409587.html
 			if(!mosq->in_packet.payload) return MOSQ_ERR_NOMEM;
 			mosq->in_packet.to_process = mosq->in_packet.remaining_length;
 		}
@@ -907,9 +905,9 @@ int _mosquitto_packet_read(struct mosquitto *mosq)
 	} // end of have_remaining if
 
 
-  // 把socket的内容都读内存
+  // 把socket的内容都读进内存
 	while(mosq->in_packet.to_process>0){
-		read_length = _mosquitto_net_read(mosq, &(mosq->in_packet.payload[mosq->in_packet.pos]), mosq->in_packet.to_process);
+		read_length = _mosquitto_net_read(mosq, &(mosq->in_packet.payload[mosq->in_packet.pos]), mosq->in_packet.to_process); //source buffer length
 		if(read_length > 0){
 #if defined(WITH_BROKER) && defined(WITH_SYS_TREE)
 			g_bytes_received += read_length;
@@ -921,13 +919,13 @@ int _mosquitto_packet_read(struct mosquitto *mosq)
 			errno = WSAGetLastError();
 #endif
 			if(errno == EAGAIN || errno == COMPAT_EWOULDBLOCK){
-				return MOSQ_ERR_SUCCESS;
+				return MOSQ_ERR_SUCCESS; //内容暂时不可读，等待下一次。
 			}else{
 				switch(errno){
-					case COMPAT_ECONNRESET:
-						return MOSQ_ERR_CONN_LOST;
-					default:
-						return MOSQ_ERR_ERRNO;
+        case COMPAT_ECONNRESET:
+          return MOSQ_ERR_CONN_LOST;
+        default:
+          return MOSQ_ERR_ERRNO;
 				}
 			}
 		}
@@ -935,15 +933,15 @@ int _mosquitto_packet_read(struct mosquitto *mosq)
 
 	/* All data for this packet is read. */
 	mosq->in_packet.pos = 0;
-  // 读完之后交给packet_handle处理
-  // WITH_BROKER的断言是什么意思
+  // 到这里，一个完整的协议包内容就算读完了。
+  //在这里，我们交给更加上层的函数进行处理，即packet_handle处理
 #ifdef WITH_BROKER
-#  ifdef WITH_SYS_TREE
+  #ifdef WITH_SYS_TREE
 	g_msgs_received++;
 	if(((mosq->in_packet.command)&0xF5) == PUBLISH){
 		g_pub_msgs_received++;
 	}
-#  endif
+  #endif
 	rc = mqtt3_packet_handle(db, mosq);
 #else
 	rc = _mosquitto_packet_handle(mosq);

@@ -44,6 +44,9 @@ POSSIBILITY OF SUCH DAMAGE.
 extern unsigned int g_connection_count;
 #endif
 
+
+// FIXME 这里的context变量就是db->contexts数组里面拿出来的，在创建完新的context插入db之后，才跑到这里检验客户端是否重连
+// 存在优化的空间
 int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 {
 	char *protocol_name = NULL;
@@ -78,6 +81,7 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 		return MOSQ_ERR_PROTOCOL;
 	}
 
+  // 下面是对connect包逐个字节的校验合法性
 	if(_mosquitto_read_string(&context->in_packet, &protocol_name)){
 		mqtt3_context_disconnect(db, context);
 		return 1;
@@ -171,7 +175,7 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 		}
 		if(strlen(will_topic) == 0){
 			/* FIXME - CONNACK_REFUSED_IDENTIFIER_REJECTED not really appropriate here. */
-			_mosquitto_send_connack(context, CONNACK_REFUSED_IDENTIFIER_REJECTED);
+			_mosquitto_send_connack(context, CONNACK_REFUSED_IDENTIFIER_REJECTED); //作者在这里说了，这个返回值其实可以再细化到具体的错误类型值
 			mqtt3_context_disconnect(db, context);
 			rc = 1;
 			goto handle_connect_error;
@@ -189,7 +193,7 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 				goto handle_connect_error;
 			}
 
-			rc = _mosquitto_read_bytes(&context->in_packet, will_payload, will_payloadlen);
+			rc = _mosquitto_read_bytes(&context->in_packet, will_payload, will_payloadlen);   // will_payload 是buffer
 			if(rc){
 				mqtt3_context_disconnect(db, context);
 				rc = 1;
@@ -204,7 +208,7 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 			if(password_flag){
 				rc = _mosquitto_read_string(&context->in_packet, &password);
 				if(rc == MOSQ_ERR_NOMEM){
-					rc = MOSQ_ERR_NOMEM;
+					/* rc = MOSQ_ERR_NOMEM; */
 					goto handle_connect_error;
 				}else if(rc == MOSQ_ERR_PROTOCOL){
 					/* Password flag given, but no password. Ignore. */
@@ -212,7 +216,7 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 				}
 			}
 		}else if(rc == MOSQ_ERR_NOMEM){
-			rc = MOSQ_ERR_NOMEM;
+			/* rc = MOSQ_ERR_NOMEM; */
 			goto handle_connect_error;
 		}else{
 			/* Username flag given, but no username. Ignore. */
@@ -220,6 +224,7 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 		}
 	}
 
+  // TODO 重点看下HTTPS的认证环节
 #ifdef WITH_TLS
 	if(context->listener->use_identity_as_username){
 		if(!context->ssl){
@@ -335,10 +340,12 @@ int mqtt3_handle_connect(struct mosquitto_db *db, struct mosquitto *context)
 		context->state = mosq_cs_disconnecting;
 		context = db->contexts[i];
 		if(context->msgs){
-			mqtt3_db_message_reconnect_reset(context);
+			mqtt3_db_message_reconnect_reset(context); //把积压的消息状态改变
 		}
-	}
+	}// end of find_cih
 
+  // 如果db本身是存有客户端context，
+  // 这个传进来的context的free操作不是在这里做的，要不然就是内存泄露了
 	context->id = client_id;
 	client_id = NULL;
 	context->clean_session = clean_session;
@@ -523,7 +530,7 @@ int mqtt3_handle_subscribe(struct mosquitto_db *db, struct mosquitto *context)
 
 	if(_mosquitto_send_suback(context, mid, payloadlen, payload)) rc = 1;
 	_mosquitto_free(payload);
-	
+
 #ifdef WITH_PERSISTENCE
 	db->persistence_changes++;
 #endif
@@ -560,4 +567,3 @@ int mqtt3_handle_unsubscribe(struct mosquitto_db *db, struct mosquitto *context)
 
 	return _mosquitto_send_command_with_mid(context, UNSUBACK, mid, false);
 }
-

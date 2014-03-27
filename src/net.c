@@ -105,8 +105,10 @@ int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq) //ËØïÁù
   // hack for apple
   struct kevent change;
 
+  // TODO error shuold be EAGAIN/EWOULDBLOCK
 	new_sock = accept(listensock, NULL, 0);
 	if(new_sock == INVALID_SOCKET) return -1;
+  printf("new sock accept\n");
 
 #ifdef WITH_SYS_TREE
 	g_socket_connections++;
@@ -239,7 +241,7 @@ int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq) //ËØïÁù
 #endif
 
   // hack for apple
-  EV_SET(&change, new_sock, EVFILT_READ, EV_ADD, 0, 0, NULL);
+  EV_SET(&change, new_sock, EVFILT_READ | EVFILT_WRITE, EV_ADD, 0, 0, NULL);
   kevent(kq, &change, 1, NULL, 0, NULL);
 
 	return new_sock;

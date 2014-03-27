@@ -27,12 +27,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 */
 
-
-
-// 整个.c就两个文件！！！！！！
 // 处理packet的最终写和读
-
-
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -64,12 +59,14 @@ int mqtt3_packet_handle(struct mosquitto_db *db, struct mosquitto *context)
 		case PUBCOMP:
 			return _mosquitto_handle_pubackcomp(context, "PUBCOMP");
 		case PUBLISH:
+      //
 			return mqtt3_handle_publish(db, context);
 		case PUBREC:
 			return _mosquitto_handle_pubrec(context);
 		case PUBREL:
 			return _mosquitto_handle_pubrel(db, context);
-		case CONNECT:
+    case CONNECT:
+      //
 			return mqtt3_handle_connect(db, context);
 		case DISCONNECT:
 			return mqtt3_handle_disconnect(db, context);
@@ -92,9 +89,7 @@ int mqtt3_packet_handle(struct mosquitto_db *db, struct mosquitto *context)
 }
 
 
-
 //  TODO 重点看看publish的消息处理，把对消息的处理机制摸索清楚
-// 有点绕=.=
 int mqtt3_handle_publish(struct mosquitto_db *db, struct mosquitto *context)
 {
 	char *topic;
@@ -206,6 +201,7 @@ int mqtt3_handle_publish(struct mosquitto_db *db, struct mosquitto *context)
 		topic = topic_mount;
 	}
 
+  // 分配空间，写buffer
 	if(payloadlen){
 		if(db->config->message_size_limit && payloadlen > db->config->message_size_limit){
 			_mosquitto_log_printf(NULL, MOSQ_LOG_DEBUG, "Dropped too large PUBLISH from %s (d%d, q%d, r%d, m%d, '%s', ... (%ld bytes))", context->id, dup, qos, retain, mid, topic, (long)payloadlen);
@@ -235,6 +231,7 @@ int mqtt3_handle_publish(struct mosquitto_db *db, struct mosquitto *context)
 	}
 
 	_mosquitto_log_printf(NULL, MOSQ_LOG_DEBUG, "Received PUBLISH from %s (d%d, q%d, r%d, m%d, '%s', ... (%ld bytes))", context->id, dup, qos, retain, mid, topic, (long)payloadlen);
+  // TODO 对qos>0的情况再看下
 	if(qos > 0){
 		mqtt3_db_message_store_find(context, mid, &stored);
 	}
@@ -250,6 +247,7 @@ int mqtt3_handle_publish(struct mosquitto_db *db, struct mosquitto *context)
 	}
 	switch(qos){
 		case 0:
+      // queue了之后，客户端怎么去拉它自己的信息呢？
 			if(mqtt3_db_messages_queue(db, context->id, topic, qos, retain, stored)) rc = 1;
 			break;
 		case 1:
