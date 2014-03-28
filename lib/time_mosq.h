@@ -30,6 +30,9 @@ POSSIBILITY OF SUCH DAMAGE.
 #ifndef _TIME_MOSQ_H_
 #define _TIME_MOSQ_H_
 
+// FIXBUG time_t type undelcared
+#include <time.h>
+
 time_t mosquitto_time(void);
 
 #endif

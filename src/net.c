@@ -76,14 +76,14 @@ static int tls_ex_index_listener = -1;
 extern unsigned int g_socket_connections;
 #endif
 
-// hack for apple
-#include <sys/types.h>
-#include <sys/event.h>
-#include <sys/time.h>
-#include <stdlib.h>
+/* Libevent */
+#include <event2/event.h>
+#include <event2/event_struct.h>
+#include <event2/bufferevent.h>
+#include <event2/buffer.h>
 
-
-int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq) //试着在accpet的时候，监听新的socket
+int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_db *db)
+//试着在accpet的时候，监听新的socket
 {
 	int i;
 	int j;
@@ -102,12 +102,10 @@ int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq) //试�
 	char address[1024];
 #endif
 
-  // hack for apple
-  struct kevent change;
-
   // TODO error shuold be EAGAIN/EWOULDBLOCK
 	new_sock = accept(listensock, NULL, 0);
 	if(new_sock == INVALID_SOCKET) return -1;
+
   printf("new sock accept\n");
 
 #ifdef WITH_SYS_TREE
@@ -115,12 +113,12 @@ int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq) //试�
 #endif
 
 #ifndef WIN32
-	/* Set non-blocking */
+  /* Set non-blocking */
 	opt = fcntl(new_sock, F_GETFL, 0);
 	if(opt == -1 || fcntl(new_sock, F_SETFL, opt | O_NONBLOCK) == -1){
 		/* If either fcntl fails, don't want to allow this client to connect. */
 		close(new_sock);
-		return -1;
+    return INVALID_SOCKET;
 	}
 #else
 	if(ioctlsocket(new_sock, FIONBIO, &opt)){
@@ -197,8 +195,8 @@ int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq) //试�
 								e = ERR_get_error();
 								while(e){
 									_mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE,
-											"Client connection from %s failed: %s.",
-											new_context->address, ERR_error_string(e, ebuf));
+                                        "Client connection from %s failed: %s.",
+                                        new_context->address, ERR_error_string(e, ebuf));
 									e = ERR_get_error();
 								}
 								mqtt3_context_cleanup(NULL, new_context, true);
@@ -240,9 +238,15 @@ int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq) //试�
 	}
 #endif
 
-  // hack for apple
-  EV_SET(&change, new_sock, EVFILT_READ | EVFILT_WRITE, EV_ADD, 0, 0, NULL);
-  kevent(kq, &change, 1, NULL, 0, NULL);
+
+  /* Install time server. */
+  /* ev = event_new(base, new_sock, EV_READ|EV_WRITE|EV_PERSIST, loop_handle_reads_writes, db); */
+  /* if (!ev) */
+  /*   { */
+  /*     // can not accept more events */
+  /*     return -1; */
+  /*   } */
+  /* ev_add(event, NULL); */
 
 	return new_sock;
 }

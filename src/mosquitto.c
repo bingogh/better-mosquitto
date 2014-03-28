@@ -316,7 +316,6 @@ int main(int argc, char *argv[])
 	}
 #endif
 
-  // 开始server端的loop循环，采用poll模式
 	run = 1;
 	rc = mosquitto_main_loop(&int_db, listensock, listensock_count, listener_max);
 

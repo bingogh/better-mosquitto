@@ -87,6 +87,9 @@ if (WIN32)
 	set (MOSQ_LIBS ${MOSQ_LIBS} ws2_32)
 endif (WIN32)
 
+# Libevent
+set (MOSQ_LIBS ${MOSQ_LIBS} event)
+
 target_link_libraries(mosquitto ${MOSQ_LIBS})
 
 install(TARGETS mosquitto RUNTIME DESTINATION ${SBINDIR} LIBRARY DESTINATION ${LIBDIR})

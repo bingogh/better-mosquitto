@@ -43,6 +43,12 @@ POSSIBILITY OF SUCH DAMAGE.
 #define __attribute__(attrib)
 #endif
 
+/* Libevent */
+#include <event2/event.h>
+#include <event2/event_struct.h>
+#include <event2/bufferevent.h>
+#include <event2/buffer.h>
+
 /* Log destinations */
 #define MQTT3_LOG_NONE 0x00
 #define MQTT3_LOG_SYSLOG 0x01
@@ -316,6 +322,12 @@ struct _mqtt3_bridge{
 #endif
 };
 
+/* libevent */
+struct mosquitto_funcs_data {
+  struct mosquitto_db * db,
+    struct event_base *base,
+};
+
 #include <net_mosq.h>
 
 /* ============================================================
@@ -348,10 +360,15 @@ int _mosquitto_send_suback(struct mosquitto *context, uint16_t mid, uint32_t pay
 /* ============================================================
  * Network functions
  * ============================================================ */
-/* int mqtt3_socket_accept(struct mosquitto_db *db, int listensock); */
-int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq);
+/* int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq); */
+int mqtt3_socket_accept(int fd, short ev, struct mosquitto_db *db);
 int mqtt3_socket_listen(struct _mqtt3_listener *listener);
 int _mosquitto_socket_get_address(int sock, char *buf, int len);
+/* Libevent */
+void loop_handle_reads_writes(int fd, short ev, void *arg);
+void mosquitto_read_cb(struct bufferevent *bev, void *arg);
+void mosquitto_error_cb(struct bufferevent *bev, short event, void *arg);
+void mosquitto_write_cb(struct bufferevent *bev, void *arg);
 
 /* ============================================================
  * Read handling functions
