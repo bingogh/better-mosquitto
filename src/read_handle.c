@@ -71,6 +71,7 @@ int mqtt3_packet_handle(struct mosquitto_db *db, struct mosquitto *context)
 		case DISCONNECT:
 			return mqtt3_handle_disconnect(db, context);
 		case SUBSCRIBE:
+      //
 			return mqtt3_handle_subscribe(db, context);
 		case UNSUBSCRIBE:
 			return mqtt3_handle_unsubscribe(db, context);

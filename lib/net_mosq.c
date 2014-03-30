@@ -148,6 +148,8 @@ int _mosquitto_packet_queue(struct mosquitto *mosq, struct _mosquitto_packet *pa
 	packet->to_process = packet->packet_length;
 
 	packet->next = NULL;
+
+  // TODO 为什么这里用线程锁
 	pthread_mutex_lock(&mosq->out_packet_mutex);
 	if(mosq->out_packet){
 		mosq->out_packet_last->next = packet;
@@ -700,6 +702,7 @@ ssize_t _mosquitto_net_write(struct mosquitto *mosq, void *buf, size_t count)
 #endif
 }
 
+//TODO 解决这里多锁的问题
 int _mosquitto_packet_write(struct mosquitto *mosq)
 {
 	ssize_t write_length;
@@ -728,6 +731,8 @@ int _mosquitto_packet_write(struct mosquitto *mosq)
 
 		while(packet->to_process > 0){
 			write_length = _mosquitto_net_write(mosq, &(packet->payload[packet->pos]), packet->to_process);
+      printf("have send out %zd bytes.\n",write_length);
+
 			if(write_length > 0){
 #if defined(WITH_BROKER) && defined(WITH_SYS_TREE)
 				g_bytes_sent += write_length;
@@ -805,10 +810,11 @@ int _mosquitto_packet_read(struct mosquitto_db *db, struct mosquitto *mosq)
 	ssize_t read_length;
 	int rc = 0;
 
+  printf("in packet read\n");
+
 	if(!mosq) return MOSQ_ERR_INVAL;
 	if(mosq->sock == INVALID_SOCKET) return MOSQ_ERR_NO_CONN;
 
-  printf("in packet read\n");
 
   /* This gets called if pselect() indicates that there is network data
 	 * available - ie. at least one byte.  What we do depends on what data we

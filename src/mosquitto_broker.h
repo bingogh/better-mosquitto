@@ -324,8 +324,8 @@ struct _mqtt3_bridge{
 
 /* libevent */
 struct mosquitto_funcs_data {
-  struct mosquitto_db * db,
-    struct event_base *base,
+  struct mosquitto_db * db;
+  struct event_base *base;
 };
 
 #include <net_mosq.h>
@@ -360,8 +360,7 @@ int _mosquitto_send_suback(struct mosquitto *context, uint16_t mid, uint32_t pay
 /* ============================================================
  * Network functions
  * ============================================================ */
-/* int mqtt3_socket_accept(struct mosquitto_db *db, int listensock, int kq); */
-int mqtt3_socket_accept(int fd, short ev, struct mosquitto_db *db);
+int mqtt3_socket_accept(int fd, short ev, struct mosquitto_funcs_data *);
 int mqtt3_socket_listen(struct _mqtt3_listener *listener);
 int _mosquitto_socket_get_address(int sock, char *buf, int len);
 /* Libevent */

@@ -88,7 +88,7 @@ if (WIN32)
 endif (WIN32)
 
 # Libevent
-set (MOSQ_LIBS ${MOSQ_LIBS} event)
+set (MOSQ_LIBS ${MOSQ_LIBS} event pthread)
 
 target_link_libraries(mosquitto ${MOSQ_LIBS})
 

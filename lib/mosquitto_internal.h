@@ -41,6 +41,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #endif
 #include <stdlib.h>
 
+// 在broker的情况下，不允许使用threading相关的功能
+// 但是为什么要做这样的限制呢？
 #if defined(WITH_THREADING) && !defined(WITH_BROKER)
 #  include <pthread.h>
 #else
@@ -138,6 +140,7 @@ struct mosquitto {
 	struct _mosquitto_packet *current_out_packet;
 	struct _mosquitto_packet *out_packet;
 	struct mosquitto_message *will;
+
 #ifdef WITH_TLS
 	SSL *ssl;
 	SSL_CTX *ssl_ctx;
@@ -153,7 +156,9 @@ struct mosquitto {
 	char *tls_psk_identity;
 	bool tls_insecure;
 #endif
+
 	bool want_write;
+
 #if defined(WITH_THREADING) && !defined(WITH_BROKER)
 	pthread_mutex_t callback_mutex;
 	pthread_mutex_t log_callback_mutex;
@@ -164,6 +169,7 @@ struct mosquitto {
 	pthread_mutex_t message_mutex;
 	pthread_t thread_id;
 #endif
+
 #ifdef WITH_BROKER
 	bool is_bridge;
 	struct _mqtt3_bridge *bridge;

@@ -3,8 +3,12 @@ better-mosquitto
 Because there are several design in mosquitto are not good enough, so i decide to change it as to train my c.
 
 ## TODO
-- kevent support
 - event loop layer to support multi platform
+
+## log
+- 2014.3.30 try to add libevent support
+- 2014.3.27 add kqueue support
+
 
 ## Feature
 

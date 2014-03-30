@@ -82,7 +82,8 @@ extern unsigned int g_socket_connections;
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
 
-int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_db *db)
+/* int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_db *db) */
+int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *args)
 //试着在accpet的时候，监听新的socket
 {
 	int i;
@@ -90,6 +91,11 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_db *db)
 	int new_sock = -1;
 	struct mosquitto **tmp_contexts = NULL;
 	struct mosquitto *new_context;
+  //
+  struct mosquitto_db *db;
+  struct event_base *base;
+  struct event *event;
+
 	int opt = 1;
 #ifdef WITH_TLS
 	BIO *bio;
@@ -101,6 +107,9 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_db *db)
 	struct request_info wrap_req;
 	char address[1024];
 #endif
+
+  db = args->db;
+  base = args->base;
 
   // TODO error shuold be EAGAIN/EWOULDBLOCK
 	new_sock = accept(listensock, NULL, 0);
@@ -238,15 +247,15 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_db *db)
 	}
 #endif
 
-
-  /* Install time server. */
-  /* ev = event_new(base, new_sock, EV_READ|EV_WRITE|EV_PERSIST, loop_handle_reads_writes, db); */
-  /* if (!ev) */
-  /*   { */
-  /*     // can not accept more events */
-  /*     return -1; */
-  /*   } */
-  /* ev_add(event, NULL); */
+  event = event_new(base, new_sock, EV_READ|EV_WRITE|EV_PERSIST, loop_handle_reads_writes, db);
+  if (!event)
+    {
+      // can not accept more events
+      // TODO better data clean up
+      new_context->sock = INVALID_SOCKET;
+      return -1;
+    }
+  event_add(event, NULL);
 
 	return new_sock;
 }
