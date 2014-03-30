@@ -83,7 +83,7 @@ int _mosquitto_send_connect(struct mosquitto *mosq, uint16_t keepalive, bool cle
 	_mosquitto_write_string(packet, PROTOCOL_NAME, strlen(PROTOCOL_NAME));
 #if defined(WITH_BROKER) && defined(WITH_BRIDGE)
 	if(mosq->bridge && mosq->bridge->try_private && mosq->bridge->try_private_accepted){
-		version |= 0x80;
+		version |= 0x80; // rsmb和mosquitto独有的协议头，用来做bridge支持的
 	}else{
 	}
 #endif
@@ -224,4 +224,3 @@ int _mosquitto_send_unsubscribe(struct mosquitto *mosq, int *mid, bool dup, cons
 #endif
 	return _mosquitto_packet_queue(mosq, packet);
 }
-

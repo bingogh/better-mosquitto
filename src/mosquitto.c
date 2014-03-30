@@ -307,16 +307,15 @@ int main(int argc, char *argv[])
 #endif
 
   // 桥接其他broker
-#ifdef WITH_BRIDGE
 	for(i=0; i<config.bridge_count; i++){
 		if(mqtt3_bridge_new(&int_db, &(config.bridges[i]))){
 			_mosquitto_log_printf(NULL, MOSQ_LOG_WARNING, "Warning: Unable to connect to bridge %s.",
-					config.bridges[i].name);
+                            config.bridges[i].name);
 		}
 	}
-#endif
 
 	run = 1;
+  // TODO 明天开始改这里，把所有的with_broker和with_bridge去掉。并且对共享资源context增加锁
 	rc = mosquitto_main_loop(&int_db, listensock, listensock_count, listener_max);
 
 

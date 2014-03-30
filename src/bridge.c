@@ -187,6 +187,7 @@ int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context)
 		}
 	}
 
+  // 设置notifications的提醒，如果没设置，就用默认的
 	if(context->bridge->notifications){
 		notification_payload = '0';
 		if(context->bridge->notification_topic){
@@ -225,6 +226,7 @@ int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context)
 		return rc;
 	}
 
+  // 把两个broker之间的连接用一个context装起来
 	rc = _mosquitto_send_connect(context, context->keepalive, context->clean_session);
 	if(rc == MOSQ_ERR_SUCCESS){
 		return MOSQ_ERR_SUCCESS;

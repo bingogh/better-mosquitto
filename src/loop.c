@@ -139,7 +139,6 @@ int loop_push_db_context_msg(void *arg)
 	time_t last_backup = mosquitto_time();
 	time_t last_store_clean = mosquitto_time();
 
-
 #ifdef WITH_SYS_TREE
   // TODO check this to see how send message work
   mqtt3_db_sys_update(db, db->config->sys_interval, start_time);
@@ -171,6 +170,7 @@ int loop_push_db_context_msg(void *arg)
             /* FIXME - this should be non-blocking */
             // broker的连接策略可以看下man mosquitto.conf 的说明，比较清晰点
             if(_mosquitto_try_connect(db->contexts[i]->bridge->addresses[0].address, db->contexts[i]->bridge->addresses[0].port, &bridge_sock, NULL, true) == MOSQ_ERR_SUCCESS){
+              //TODO 为什么连接完又主动关闭了？
               COMPAT_CLOSE(bridge_sock);
               _mosquitto_socket_close(db->contexts[i]);
               db->contexts[i]->bridge->cur_address = db->contexts[i]->bridge->address_count-1; // 不断的去测试新bridge地址...
@@ -199,7 +199,6 @@ int loop_push_db_context_msg(void *arg)
         }
       }else{
 
-        // TODO bridge的情况
 #ifdef WITH_BRIDGE
         if(db->contexts[i]->bridge){
           /* Want to try to restart the bridge connection */
@@ -251,7 +250,7 @@ int loop_push_db_context_msg(void *arg)
               }
             }
           }
-        }else{
+        }else{ // end of db->contexts[i]->bridge
 #endif
           //这个连接上次由于什么原因，挂了，设置了clean session，所以这里直接彻底清空其结构
           if(db->contexts[i]->clean_session == true){

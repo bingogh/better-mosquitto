@@ -56,6 +56,8 @@ int _mosquitto_packet_handle(struct mosquitto *mosq)
 		case PUBCOMP:
 			return _mosquitto_handle_pubackcomp(mosq, "PUBCOMP");
 		case PUBLISH:
+      // src/lib文件夹下分别都有一个read_handle文件
+      // 后者针对的是非broker的情况
 			return _mosquitto_handle_publish(mosq);
 		case PUBREC:
 			return _mosquitto_handle_pubrec(mosq);
@@ -74,8 +76,10 @@ int _mosquitto_packet_handle(struct mosquitto *mosq)
 	}
 }
 
+// 做成线程安全的一个函数
 int _mosquitto_handle_publish(struct mosquitto *mosq)
 {
+
 	uint8_t header;
 	struct mosquitto_message_all *message;
 	int rc = 0;
@@ -171,4 +175,3 @@ int _mosquitto_handle_publish(struct mosquitto *mosq)
 			return MOSQ_ERR_PROTOCOL;
 	}
 }
-

@@ -27,7 +27,6 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 */
 
-// 处理packet的最终写和读
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -75,14 +74,12 @@ int mqtt3_packet_handle(struct mosquitto_db *db, struct mosquitto *context)
 			return mqtt3_handle_subscribe(db, context);
 		case UNSUBSCRIBE:
 			return mqtt3_handle_unsubscribe(db, context);
-#ifdef WITH_BRIDGE
 		case CONNACK:
 			return mqtt3_handle_connack(db, context);
 		case SUBACK:
 			return _mosquitto_handle_suback(context);
 		case UNSUBACK:
 			return _mosquitto_handle_unsuback(context);
-#endif
 		default:
 			/* If we don't recognise the command, return an error straight away. */
 			return MOSQ_ERR_PROTOCOL;
@@ -90,7 +87,6 @@ int mqtt3_packet_handle(struct mosquitto_db *db, struct mosquitto *context)
 }
 
 
-//  TODO 重点看看publish的消息处理，把对消息的处理机制摸索清楚
 int mqtt3_handle_publish(struct mosquitto_db *db, struct mosquitto *context)
 {
 	char *topic;
@@ -104,12 +100,10 @@ int mqtt3_handle_publish(struct mosquitto_db *db, struct mosquitto *context)
 	struct mosquitto_msg_store *stored = NULL;
 	int len;
 	char *topic_mount;
-#ifdef WITH_BRIDGE
 	char *topic_temp;
 	int i;
 	struct _mqtt3_bridge_topic *cur_topic;
 	bool match;
-#endif
 
 	dup = (header & 0x08)>>3;
 	qos = (header & 0x06)>>1;
@@ -129,7 +123,7 @@ int mqtt3_handle_publish(struct mosquitto_db *db, struct mosquitto *context)
 		_mosquitto_free(topic);
 		return 1;
 	}
-#ifdef WITH_BRIDGE
+
 	if(context->bridge && context->bridge->topics && context->bridge->topic_remapping){
 		for(i=0; i<context->bridge->topic_count; i++){
 			cur_topic = &context->bridge->topics[i];
@@ -172,7 +166,7 @@ int mqtt3_handle_publish(struct mosquitto_db *db, struct mosquitto *context)
 			}
 		}
 	}
-#endif
+
 	if(_mosquitto_topic_wildcard_len_check(topic) != MOSQ_ERR_SUCCESS){
 		/* Invalid publish topic, just swallow it. */
 		_mosquitto_free(topic);
@@ -248,7 +242,6 @@ int mqtt3_handle_publish(struct mosquitto_db *db, struct mosquitto *context)
 	}
 	switch(qos){
 		case 0:
-      // queue了之后，客户端怎么去拉它自己的信息呢？
 			if(mqtt3_db_messages_queue(db, context->id, topic, qos, retain, stored)) rc = 1;
 			break;
 		case 1:

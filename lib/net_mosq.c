@@ -280,8 +280,8 @@ int _mosquitto_try_connect(const char *host, uint16_t port, int *sock, const cha
 			}
 		}
 
+    /* Set non-blocking */
 		if(!blocking){
-			/* Set non-blocking */
 #ifndef WIN32
 			opt = fcntl(*sock, F_GETFL, 0);
 			if(opt == -1 || fcntl(*sock, F_SETFL, opt | O_NONBLOCK) == -1){
