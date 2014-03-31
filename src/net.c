@@ -82,7 +82,6 @@ extern unsigned int g_socket_connections;
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
 
-/* int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_db *db) */
 int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *args)
 //试着在accpet的时候，监听新的socket
 {
@@ -218,7 +217,6 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *a
 		}
 #endif
 
-
     // 内存分配
 		_mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "New connection from %s on port %d.", new_context->address, new_context->listener->port);
 		for(i=0; i<db->context_count; i++){
@@ -242,21 +240,24 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *a
 		}
 		// If we got here then the context's DB index is "i" regardless of how we got here
 		new_context->db_index = i;
-
 #ifdef WITH_WRAP
 	}
 #endif
 
-  event = event_new(base, new_sock, EV_READ|EV_WRITE|EV_PERSIST, loop_handle_reads_writes, db);
+  printf("没有在内存分配这里挂了\n");
+  event = event_new(base, new_sock, EV_READ|EV_PERSIST, loop_handle_reads_writes, db);
   if (!event)
     {
       // can not accept more events
       // TODO better data clean up
       new_context->sock = INVALID_SOCKET;
       return -1;
-    }
+    }else{
+    new_context->event = event;
+  }
   event_add(event, NULL);
-
+  printf("没有在event_add这里挂了\n");
+  printf("分配到的socket%d\n",new_sock);
 	return new_sock;
 }
 

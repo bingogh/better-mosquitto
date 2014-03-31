@@ -43,12 +43,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #define __attribute__(attrib)
 #endif
 
-/* Libevent */
-#include <event2/event.h>
-#include <event2/event_struct.h>
-#include <event2/bufferevent.h>
-#include <event2/buffer.h>
-
 /* Log destinations */
 #define MQTT3_LOG_NONE 0x00
 #define MQTT3_LOG_SYSLOG 0x01

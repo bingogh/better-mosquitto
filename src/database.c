@@ -230,6 +230,7 @@ int mqtt3_db_message_delete(struct mosquitto *context, uint16_t mid, enum mosqui
 // 把消息插入到传入的客户端的msg链表里面
 int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, uint16_t mid, enum mosquitto_msg_direction dir, int qos, bool retain, struct mosquitto_msg_store *stored)
 {
+
 	struct mosquitto_client_msg *msg, *tail = NULL;
 	enum mosquitto_msg_state state = mosq_ms_invalid;
 	int msg_count = 0;
@@ -271,7 +272,6 @@ int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, 
 			}
 		}
 	}
-
 
   // 统计客户端积累的信息数
   if(context->msgs){
@@ -331,6 +331,7 @@ int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, 
 	}else{ // else of context->cotnext == Invalid_socket
 
     // 客户端不在线
+    // FIXME 这里会丢信息
 		if(max_queued > 0 && msg_count >= max_queued){ //当前消息数已经大于最大排队消息数，直接drop掉
 #ifdef WITH_SYS_TREE
 			g_msgs_dropped++;
@@ -349,8 +350,9 @@ int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, 
 	}
 #endif
 
-
+  // for debug
   printf("now create a msg struct");
+
   //构造一个消息包
 	msg = _mosquitto_malloc(sizeof(struct mosquitto_client_msg));
 	if(!msg) return MOSQ_ERR_NOMEM;
@@ -364,12 +366,13 @@ int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, 
 	msg->dup = false;
 	msg->qos = qos;
 	msg->retain = retain; // 是否是遗留信息
+
+  // 然后查到消息的队尾
 	if(tail){
 		tail->next = msg;
 	}else{
 		context->msgs = msg;
 	}
-
 
   // 记录这个消息曾经发给哪些客户端
   // 重链的时候可能重新发送？？
@@ -394,8 +397,6 @@ int mqtt3_db_message_insert(struct mosquitto_db *db, struct mosquitto *context, 
 		}
 	}
 
-
-  // bridge对消息插入后的策略是怎么做的？？
 #ifdef WITH_BRIDGE
 	msg_count++; /* We've just added a message to the list */
 	if(context->bridge && context->bridge->start_type == bst_lazy
@@ -459,8 +460,8 @@ int mqtt3_db_messages_easy_queue(struct mosquitto_db *db, struct mosquitto *cont
 		source_id = "";
 	}
 
-
-  // 把消息存在db的store结构体里，全局共享？
+  // 把消息存在db的store链表里
+  // 每个store结构都是以单条消息为核心的一个结构，里面记录了这条消息的主题、发送客户端、其他各种相关的信息
 	if(mqtt3_db_message_store(db, source_id, 0, topic, qos, payloadlen, payload, retain, &stored, 0)) return 1;
 
 	return mqtt3_db_messages_queue(db, source_id, topic, qos, retain, stored);
@@ -647,7 +648,8 @@ int mqtt3_db_message_reconnect_reset(struct mosquitto *context)
 }
 
 int mqtt3_db_message_timeout_check(struct mosquitto_db *db, unsigned int timeout)
-{//循环遍历每一个连接的每个消息msg,看起是否超时，如果超时，将消息状态改为上一个状态，从而后续触发重发
+{//循环遍历每一个连接的每个消息msg,看起是否超时，如果未超时，将消息状态改为上一个状态，从而后续触发重发
+
 	int i;
 	time_t threshold;
 	enum mosquitto_msg_state new_state = mosq_ms_invalid;
@@ -663,7 +665,7 @@ int mqtt3_db_message_timeout_check(struct mosquitto_db *db, unsigned int timeout
 
 		msg = context->msgs;
 		while(msg){
-			if(msg->timestamp < threshold && msg->state != mosq_ms_queued){
+			if(msg->timestamp < threshold && msg->state != mosq_ms_queued){ //这里是不是bug呢？未超时就改变状态？
 				switch(msg->state){
 					case mosq_ms_wait_for_puback:
 						new_state = mosq_ms_publish_qos1;

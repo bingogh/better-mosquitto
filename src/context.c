@@ -86,6 +86,8 @@ struct mosquitto *mqtt3_context_init(int sock)
 	context->ssl = NULL;
 #endif
 
+  // initialize here?
+  /* context->event = NULL; */
 	return context;
 }
 
@@ -202,5 +204,14 @@ void mqtt3_context_disconnect(struct mosquitto_db *db, struct mosquitto *ctxt)
 		ctxt->listener = NULL;
 	}
 	ctxt->disconnect_t = mosquitto_time();
+
+  // 取消context的event事件
+  if (ctxt->event)
+    {
+      event_del(ctxt->event);
+      ctxt->event = NULL;
+    }
+
 	_mosquitto_socket_close(ctxt);
+
 }

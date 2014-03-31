@@ -31,12 +31,8 @@
 #include <config.h>
 
 #include <assert.h>
+
 #ifndef WIN32
-/* Libevent */
-#include <event2/event.h>
-#include <event2/event_struct.h>
-#include <event2/bufferevent.h>
-#include <event2/buffer.h>
 #else
 #include <process.h>
 #include <winsock2.h>
@@ -69,10 +65,9 @@ extern int g_clients_expired;
 /* static void loop_handle_errors(struct mosquitto_db *db, struct kevent *); */
 static void do_disconnect(struct mosquitto_db *db, int fd);
 
-//hack for apple
 void diep(const char *s);
 int conn_delete(int fd);
-int loop_push_db_context_msg(void *arg);
+int loop_push_update_db_context(int fd, short n,struct mosquitto_funcs_data *arg);
 
 //打开监听套接字后，就可以进入消息事件循环
 int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock_count, int listener_max)
@@ -87,6 +82,9 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
 
   /* Initial libevent. */
   struct event_base *base = event_base_new();
+  struct event ev_timer;
+  struct timeval tv;
+
   assert(base != NULL);
 
   struct mosquitto_funcs_data funcs_data = { db, base };
@@ -104,46 +102,55 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
       event_add(ev, NULL);
     }
 
-  ret = pthread_create(&tid, NULL, loop_push_db_context_msg, db);
-  if (ret != 0) {
-    perror("pthread_create()");
-    return 1;
+  ev = event_new(base, -1, EV_PERSIST, loop_push_update_db_context, &funcs_data);
+  if(!ev){
+    _mosquitto_log_printf(NULL, MOSQ_LOG_ERR, "Error: Out of memory.");
+    return MOSQ_ERR_NOMEM;
   }
+  // 每500毫秒跑一次
+  tv.tv_sec = 1;
+  tv.tv_usec = 0;
+  evtimer_add(ev, &tv);
 
   event_base_dispatch(base);
 
-  //TODO any cleanup here?
   return MOSQ_ERR_SUCCESS;
 }
 
-// worker thread
-int loop_push_db_context_msg(void *arg)
+
+// TODO 拆分这里的逻辑
+int loop_push_update_db_context(int fd, short n, struct mosquitto_funcs_data *arg)
 {
  	int time_count;
 #ifndef WIN32
 	sigset_t sigblock, origsig;
 #endif
 	int i;
-#ifdef WITH_BRIDGE
 	int bridge_sock;
 	int rc;
-#endif
+
+  //TODO 添加信号监听机制
 #ifndef WIN32
 	sigemptyset(&sigblock);
 	sigaddset(&sigblock, SIGINT);
 #endif
-	time_t now;
-  struct mosquitto_db *db = (struct mosquitto_db *)arg;
+
+  time_t now;
+  struct mosquitto_db *db = arg->db;
+  struct event_base * base = arg->base;
+  struct event *ev;
 
   time_t start_time = mosquitto_time();
 	time_t last_backup = mosquitto_time();
 	time_t last_store_clean = mosquitto_time();
 
+  // TODO 移动一个定时任务里面去
 #ifdef WITH_SYS_TREE
   // TODO check this to see how send message work
   mqtt3_db_sys_update(db, db->config->sys_interval, start_time);
 #endif
-  mqtt3_db_message_timeout_check(db, db->config->retry_interval);
+
+  printf("we are pushing context msgs\n");
 
   //遍历每一个客户端连接,尝试将其加入监听队列里面
   time_count = 0;
@@ -156,12 +163,13 @@ int loop_push_db_context_msg(void *arg)
         now = mosquitto_time();
       }
 
+      // 客户端在线
       if(db->contexts[i]->sock != INVALID_SOCKET){
-        // 处理每个客户端
 
         // 处理bridge情况
-#ifdef WITH_BRIDGE
         if(db->contexts[i]->bridge){
+          // 检测连接的监控情况
+          // 对bridge和普通client的处理不一样，但大致意思都是超时就断掉
           _mosquitto_check_keepalive(db->contexts[i]);
           if(db->contexts[i]->bridge->round_robin == false
              && db->contexts[i]->bridge->cur_address != 0
@@ -169,15 +177,14 @@ int loop_push_db_context_msg(void *arg)
 
             /* FIXME - this should be non-blocking */
             // broker的连接策略可以看下man mosquitto.conf 的说明，比较清晰点
+            // TODO 这里的重连策略到底是怎么样的？
             if(_mosquitto_try_connect(db->contexts[i]->bridge->addresses[0].address, db->contexts[i]->bridge->addresses[0].port, &bridge_sock, NULL, true) == MOSQ_ERR_SUCCESS){
-              //TODO 为什么连接完又主动关闭了？
               COMPAT_CLOSE(bridge_sock);
               _mosquitto_socket_close(db->contexts[i]);
               db->contexts[i]->bridge->cur_address = db->contexts[i]->bridge->address_count-1; // 不断的去测试新bridge地址...
             }
           }
         }
-#endif
 
         /* Local bridges never time out in this fashion. */
         if(!(db->contexts[i]->keepalive)
@@ -186,7 +193,6 @@ int loop_push_db_context_msg(void *arg)
           //在进入poll等待之前，先尝试将未发送的数据发送出去
           if(mqtt3_db_message_write(db->contexts[i]) == MOSQ_ERR_SUCCESS){
             // silence is god.
-
           }else{ //尝试发送失败，连接出问题了
             mqtt3_context_disconnect(db, db->contexts[i]);
           }
@@ -199,7 +205,7 @@ int loop_push_db_context_msg(void *arg)
         }
       }else{
 
-#ifdef WITH_BRIDGE
+        // 客户端不在线的情况
         if(db->contexts[i]->bridge){
           /* Want to try to restart the bridge connection */
           if(!db->contexts[i]->bridge->restart_t){
@@ -212,6 +218,7 @@ int loop_push_db_context_msg(void *arg)
               db->contexts[i]->bridge->primary_retry = now + 5;
             }
           }else{
+
             if(db->contexts[i]->bridge->start_type == bst_lazy && db->contexts[i]->bridge->lazy_reconnect){
               rc = mqtt3_bridge_connect(db, db->contexts[i]);
               if(rc){
@@ -221,23 +228,21 @@ int loop_push_db_context_msg(void *arg)
                 }
               }
             }
+
             if(db->contexts[i]->bridge->start_type == bst_automatic && now > db->contexts[i]->bridge->restart_t){
               db->contexts[i]->bridge->restart_t = 0;
               rc = mqtt3_bridge_connect(db, db->contexts[i]);
               if(rc == MOSQ_ERR_SUCCESS){
 
-                // 这个socket事件应该加到主的base里面去吧=.=....
-                printf("do something, my friends");
-                /* Install time server. */
-                /* ev = _mosquitto_malloc(sizeof(struct event)); */
-                /* if (!ev) */
-                /* { */
-                // can not accept more events
-                /* return MOSQ_ERR_NOMEM; */
-                /* } */
-
-                /* event_set(ev, db->contexts[i]->sock, EV_WRITE|EV_READ|EV_PERSIST, (void *) loop_handle_reads_writes, db); */
-                /* event_add(ev, NULL); */
+                /* Create event. */
+                ev = event_new(base, db->contexts[i]->sock, EV_READ|EV_PERSIST, loop_handle_reads_writes, db);
+                if(!ev){
+                  /* TODO error handle in Libevent */
+                  _mosquitto_log_printf(NULL, MOSQ_LOG_ERR, "Error: Out of memory.");
+                  return MOSQ_ERR_NOMEM;
+                }
+                /* Add event. */
+                event_add(ev, NULL);
 
               }else{
                 /* Retry later. */
@@ -250,8 +255,9 @@ int loop_push_db_context_msg(void *arg)
               }
             }
           }
-        }else{ // end of db->contexts[i]->bridge
-#endif
+        }else{
+          // 当前客户端不是bridge的情况
+
           //这个连接上次由于什么原因，挂了，设置了clean session，所以这里直接彻底清空其结构
           if(db->contexts[i]->clean_session == true){
             mqtt3_context_cleanup(db, db->contexts[i], true);
@@ -274,39 +280,43 @@ int loop_push_db_context_msg(void *arg)
               db->contexts[i] = NULL;
             }
           }
-#ifdef WITH_BRIDGE
         }
-#endif
       }
     }
   }// end of for loop
 
-  /* 一些定时任务, 应该在while(run)的逻辑里面 */
+  // 检测每个客户端的msgs链表里面每个msg的超时情况，改变它们响应的状态码
+  mqtt3_db_message_timeout_check(db, db->config->retry_interval);
+
+  /* 一些定时的备份任务*/
 #ifdef WITH_PERSISTENCE
-    if(db->config->persistence && db->config->autosave_interval){
-      if(db->config->autosave_on_changes){
-        if(db->persistence_changes > db->config->autosave_interval){
-          mqtt3_db_backup(db, false, false);
-          db->persistence_changes = 0;
-        }
-      }else{
-        if(last_backup + db->config->autosave_interval < mosquitto_time()){
-          mqtt3_db_backup(db, false, false);
-          last_backup = mosquitto_time();
-        }
+  if(db->config->persistence && db->config->autosave_interval){
+    if(db->config->autosave_on_changes){
+      if(db->persistence_changes > db->config->autosave_interval){
+        mqtt3_db_backup(db, false, false);
+        db->persistence_changes = 0;
+      }
+    }else{
+      if(last_backup + db->config->autosave_interval < mosquitto_time()){
+        mqtt3_db_backup(db, false, false);
+        last_backup = mosquitto_time();
       }
     }
+  }
 #endif
+
   if(!db->config->store_clean_interval || last_store_clean + db->config->store_clean_interval < mosquitto_time()){
     mqtt3_db_store_clean(db);
     last_store_clean = mosquitto_time();
   }
+
 #ifdef WITH_PERSISTENCE
   if(flag_db_backup){
     mqtt3_db_backup(db, false, false);
     flag_db_backup = false;
   }
 #endif
+
   if(flag_reload){
     _mosquitto_log_printf(NULL, MOSQ_LOG_INFO, "Reloading config.");
     mqtt3_config_read(db->config, true);
@@ -316,12 +326,12 @@ int loop_push_db_context_msg(void *arg)
     mqtt3_log_init(db->config->log_type, db->config->log_dest);
     flag_reload = false;
   }
+
   if(flag_tree_print){
     mqtt3_sub_tree_print(&db->subs, 0);
     flag_tree_print = false;
   }
 
-  sleep(1); // give back control
 }
 
 static void do_disconnect(struct mosquitto_db *db, int fd)
@@ -370,74 +380,87 @@ static void do_disconnect(struct mosquitto_db *db, int fd)
 
 
 // 算法复杂度O(n)
- void loop_handle_reads_writes(int fd, short ev, void *arg)
- {//mosquitto_main_loop调用这里来处理客户端连接的读写事件
-   int i;
-   struct mosquitto_db *db = arg;
-   for(i=0; i<db->context_count; i++){
+void loop_handle_reads_writes(int fd, short ev, void *arg)
+{//mosquitto_main_loop调用这里来处理客户端连接的读写事件
+  int i;
+  struct mosquitto_db *db = arg;
 
-     // socket可写
-     if(db->contexts[i] && db->contexts[i]->sock == fd){
+  if ( 1 )
+    {
+      printf("hello\n");
+    }
+
+  //TODO 这里可以弄个hash tabble来O(1)的效率
+  for(i=0; i<db->context_count; i++){
+
+    // socket可写
+    if(db->contexts[i] && db->contexts[i]->sock == fd){
 
 #ifdef WITH_TLS
-       if(ev & EV_WRITE||
-          db->contexts[i]->want_write ||
-          (db->contexts[i]->ssl && db->contexts[i]->state == mosq_cs_new)){
+      if(ev & EV_WRITE||
+         db->contexts[i]->want_write ||
+         (db->contexts[i]->ssl && db->contexts[i]->state == mosq_cs_new)){
 #else
-         if(ev & EV_WRITE){
+        if(ev & EV_WRITE){
 #endif
-           if(_mosquitto_packet_write(db->contexts[i])){
-             if(db->config->connection_messages == true){
-               if(db->contexts[i]->state != mosq_cs_disconnecting){
-                 _mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Socket write error on client %s, disconnecting.", db->contexts[i]->id);
-               }else{
-                 _mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Client %s disconnected.", db->contexts[i]->id);
-               }
-             }
-             /* Write error or other that means we should disconnect */
-             mqtt3_context_disconnect(db, db->contexts[i]);
-           }
+          if(_mosquitto_packet_write(db->contexts[i])){
+            if(db->config->connection_messages == true){
+              if(db->contexts[i]->state != mosq_cs_disconnecting){
+                _mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Socket write error on client %s, disconnecting.", db->contexts[i]->id);
+              }else{
+                _mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Client %s disconnected.", db->contexts[i]->id);
+              }
+            }
+            /* Write error or other that means we should disconnect */
+            mqtt3_context_disconnect(db, db->contexts[i]);
+          }
 #ifdef WITH_TLS
-         }
+        }
 #else
-       } //end of with_tls
+      } //end of with_tls
 #endif
 
-       // socket可读
+      // socket可读
 #ifdef WITH_TLS
-       if(ev & EV_READ ||
-          (db->contexts[i]->ssl && db->contexts[i]->state == mosq_cs_new)){
+      if(ev & EV_READ ||
+         (db->contexts[i]->ssl && db->contexts[i]->state == mosq_cs_new)){
 #else
-         if(ev & EV_READ){
+        if(ev & EV_READ){
 #endif
-           if(_mosquitto_packet_read(db, db->contexts[i])){
-             if(db->config->connection_messages == true){
-               if(db->contexts[i]->state != mosq_cs_disconnecting){
-                 _mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Socket read error on client %s, disconnecting.", db->contexts[i]->id);
-               }else{
-                 _mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Client %s disconnected.", db->contexts[i]->id);
-               }
-             }
-             /* Read error or other that means we should disconnect */
-             mqtt3_context_disconnect(db, db->contexts[i]);
-           }
+          printf("可读\n");
+
+          if(_mosquitto_packet_read(db, db->contexts[i])){
+            if(db->config->connection_messages == true){
+              if(db->contexts[i]->state != mosq_cs_disconnecting){
+                _mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Socket read error on client %s, disconnecting.", db->contexts[i]->id);
+              }else{
+                _mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Client %s disconnected.", db->contexts[i]->id);
+              }
+            }
+            /* Read error or other that means we should disconnect */
+            mqtt3_context_disconnect(db, db->contexts[i]);
+          }
 #ifdef WITH_TLS
-         }
+        }
 #else
-       }
+      }
 #endif
 
-       // 其他错误，直接断开连接
-       if(db->contexts[i] && db->contexts[i]->sock != INVALID_SOCKET){
-         if (ev & (EV_SIGNAL | EV_TIMEOUT | EV_ET))
-           {
-             do_disconnect(db, db->contexts[i]->sock);
-           }
-       }
+      // 其他错误，直接断开连接
+      if(db->contexts[i] && db->contexts[i]->sock != INVALID_SOCKET){
+        if (ev & (EV_SIGNAL | EV_TIMEOUT | EV_ET))
+          {
+            do_disconnect(db, db->contexts[i]->sock);
+          }
+      }
 
-     } //end of sock == ident
-   } // end of for loop
- }
+     break; //跳出for循环
+
+    } //end of sock == ident
+
+  } // end of for loop
+
+}
 
 void
 diep(const char *s)

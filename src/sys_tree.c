@@ -136,6 +136,7 @@ static void calc_load(struct mosquitto_db *db, char *buf, const char *topic, dou
  */
 void mqtt3_db_sys_update(struct mosquitto_db *db, int interval, time_t start_time)
 {
+
 	static time_t last_update = 0;
 	time_t now;
 	time_t uptime;
@@ -287,7 +288,7 @@ void mqtt3_db_sys_update(struct mosquitto_db *db, int interval, time_t start_tim
 			snprintf(buf, BUFLEN, "%lu", msgs_received);
 			mqtt3_db_messages_easy_queue(db, NULL, "$SYS/broker/messages/received", 2, strlen(buf), buf, 1);
 		}
-		
+
 		if(msgs_sent != g_msgs_sent){
 			msgs_sent = g_msgs_sent;
 			snprintf(buf, BUFLEN, "%lu", msgs_sent);
@@ -305,7 +306,7 @@ void mqtt3_db_sys_update(struct mosquitto_db *db, int interval, time_t start_tim
 			snprintf(buf, BUFLEN, "%lu", pub_msgs_received);
 			mqtt3_db_messages_easy_queue(db, NULL, "$SYS/broker/publish/messages/received", 2, strlen(buf), buf, 1);
 		}
-		
+
 		if(pub_msgs_sent != g_pub_msgs_sent){
 			pub_msgs_sent = g_pub_msgs_sent;
 			snprintf(buf, BUFLEN, "%lu", pub_msgs_sent);
@@ -317,13 +318,13 @@ void mqtt3_db_sys_update(struct mosquitto_db *db, int interval, time_t start_tim
 			snprintf(buf, BUFLEN, "%llu", bytes_received);
 			mqtt3_db_messages_easy_queue(db, NULL, "$SYS/broker/bytes/received", 2, strlen(buf), buf, 1);
 		}
-		
+
 		if(bytes_sent != g_bytes_sent){
 			bytes_sent = g_bytes_sent;
 			snprintf(buf, BUFLEN, "%llu", bytes_sent);
 			mqtt3_db_messages_easy_queue(db, NULL, "$SYS/broker/bytes/sent", 2, strlen(buf), buf, 1);
 		}
-		
+
 		if(pub_bytes_received != g_pub_bytes_received){
 			pub_bytes_received = g_pub_bytes_received;
 			snprintf(buf, BUFLEN, "%llu", pub_bytes_received);
@@ -337,7 +338,8 @@ void mqtt3_db_sys_update(struct mosquitto_db *db, int interval, time_t start_tim
 		}
 
 		last_update = mosquitto_time();
-	}
+	} // 大于interval了，就更新订阅信息
+
 }
 
 #endif

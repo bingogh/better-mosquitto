@@ -30,6 +30,12 @@ POSSIBILITY OF SUCH DAMAGE.
 #ifndef _MOSQUITTO_INTERNAL_H_
 #define _MOSQUITTO_INTERNAL_H_
 
+/* Libevent */
+#include <event2/event.h>
+#include <event2/event_struct.h>
+#include <event2/bufferevent.h>
+#include <event2/buffer.h>
+
 #include "config.h"
 
 #ifdef WIN32
@@ -207,6 +213,9 @@ struct mosquitto {
 	int inflight_messages;
 	int max_inflight_messages;
 #endif
+
+  //with libevent support
+  struct event *event;
 };
 
 #endif

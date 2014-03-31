@@ -3,17 +3,17 @@ better-mosquitto
 Because there are several design in mosquitto are not good enough, so i decide to change it as to train my c.
 
 ## TODO
-- event loop layer to support multi platform
+- libevent error support
+- persist/backup
+- signal handling
 
 ## log
-- 2014.3.31 remove "WITH_BROKER" and "WITH_BRIDGE" definition
+- 2014.3.31 add libevent support done
 - 2014.3.30 try to add libevent support
 - 2014.3.27 add kqueue support
 
 
 ## Feature
-
-## Not support
 
 
 ## 架构
