@@ -122,6 +122,9 @@ int _mosquitto_send_connect(struct mosquitto *mosq, uint16_t keepalive, bool cle
 #else
 	_mosquitto_log_printf(mosq, MOSQ_LOG_DEBUG, "Client %s sending CONNECT", mosq->id);
 #endif
+
+  // 懂了，原来packet就是端对端的包
+  // msgs就是生成的信息
 	return _mosquitto_packet_queue(mosq, packet);
 }
 

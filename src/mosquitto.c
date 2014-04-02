@@ -46,6 +46,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include <errno.h>
 #include <signal.h>
+#include <syslog.h>
 #include <stdio.h>
 #include <string.h>
 #ifdef WITH_WRAP
@@ -56,7 +57,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <memory_mosq.h>
 #include "util_mosq.h"
 
-struct mosquitto_db int_db;
+struct mosquitto_db int_db; // 这个是想搞全局变量？
 
 bool flag_reload = false;
 #ifdef WITH_PERSISTENCE
@@ -136,7 +137,17 @@ void handle_sighup(int signal)
 /* Signal handler for SIGINT and SIGTERM - just stop gracefully. */
 void handle_sigint(int signal)
 {
-	run = 0;
+  switch(signal) {
+  case SIGTERM:
+  /* case SIGHUP: */
+  case SIGINT:
+    exit(0);
+    //FIXME better backup db
+    break;
+  default:
+    syslog(LOG_WARNING, "Unhandled signal (%d) %s", strsignal(signal));
+    break;
+  }
 }
 
 /* Signal handler for SIGUSR1 - backup the db. */
@@ -166,6 +177,8 @@ int main(int argc, char *argv[])
 	int rc;
 	char err[256];
 
+
+  // TODO 查看下windows平台的代码
 #if defined(WIN32) || defined(__CYGWIN__)
 	if(argc == 2){
 		if(!strcmp(argv[1], "run")){
@@ -193,14 +206,14 @@ int main(int argc, char *argv[])
 	if(config.daemon){
 #ifndef WIN32
 		switch(fork()){
-			case 0:
-          break; //to the child process
-			case -1:
-				strerror_r(errno, err, 256);
+    case 0:
+      break; //to the child process
+    case -1:
+      strerror_r(errno, err, 256);
 			_mosquitto_log_printf(NULL, MOSQ_LOG_ERR, "Error in fork: %s", err);
-				return 1;
-			default:
-				return MOSQ_ERR_SUCCESS;
+      return 1;
+    default:
+      return MOSQ_ERR_SUCCESS;
 		}
 #else
 		_mosquitto_log_printf(NULL, MOSQ_LOG_WARNING, "Warning: Can't start in daemon mode in Windows.");
@@ -220,25 +233,26 @@ int main(int argc, char *argv[])
 	rc = drop_privileges(&config);
 	if(rc != MOSQ_ERR_SUCCESS) return rc;
 
-  // 如果要重写的话，应该在这里改用mysql之类的，对信息做持久化，加多一层？
+  // TODO 采用mysql之类的信息存储
 	rc = mqtt3_db_open(&config, &int_db);
 	if(rc != MOSQ_ERR_SUCCESS){
-      _mosquitto_log_printf(NULL, MOSQ_LOG_ERR, "Error: Couldn't open database."); //读写本地文件，加载到内存？？
+    //读写本地文件，加载到内存
+    // 如果数据量大的话，基本这里就挂掉了
+    _mosquitto_log_printf(NULL, MOSQ_LOG_ERR, "Error: Couldn't open database.");
 		return rc;
 	}
 
 	/* Initialise logging only after initialising the database in case we're
 	 * logging to topics */
-	mqtt3_log_init(config.log_type, config.log_dest);
+	mqtt3_log_init(config.log_type, config.log_dest); // 在log_init之前的log信息都写到stderr里面去
 	_mosquitto_log_printf(NULL, MOSQ_LOG_INFO, "mosquitto version %s (build date %s) starting", VERSION, TIMESTAMP);
-	_mosquitto_log_printf(NULL, MOSQ_LOG_INFO, "hack by zhkzyth");
 	if(config.config_file){
 		_mosquitto_log_printf(NULL, MOSQ_LOG_INFO, "Config loaded from %s.", config.config_file);
 	}else{
 		_mosquitto_log_printf(NULL, MOSQ_LOG_INFO, "Using default config.");
 	}
 
-  //
+  // TODO 安全相关的模块初始化
 	rc = mosquitto_security_module_init(&int_db);
 	if(rc) return rc;
 	rc = mosquitto_security_init(&int_db, false);
@@ -259,7 +273,8 @@ int main(int argc, char *argv[])
 	listener_max = -1;
 	listensock_index = 0;
 	for(i=0; i<config.listener_count; i++){
-		if(mqtt3_socket_listen(&config.listeners[i])){
+
+    if(mqtt3_socket_listen(&config.listeners[i])){ //初始化每个listener的listen socket
 			_mosquitto_free(int_db.contexts);
 			mqtt3_db_close(&int_db);
 			if(config.pid_file){
@@ -267,6 +282,7 @@ int main(int argc, char *argv[])
 			}
 			return 1;
 		}
+
 		listensock_count += config.listeners[i].sock_count;
 		listensock = _mosquitto_realloc(listensock, sizeof(int)*listensock_count);
 		if(!listensock){
@@ -277,6 +293,7 @@ int main(int argc, char *argv[])
 			}
 			return 1;
 		}
+
 		for(j=0; j<config.listeners[i].sock_count; j++){
 			if(config.listeners[i].socks[j] == INVALID_SOCKET){
 				_mosquitto_free(int_db.contexts);
@@ -292,6 +309,7 @@ int main(int argc, char *argv[])
 			}
 			listensock_index++;
 		}
+
 	}
 
   // 信号处理
@@ -306,7 +324,7 @@ int main(int argc, char *argv[])
 	signal(SIGPIPE, SIG_IGN);
 #endif
 
-  // 桥接其他broker
+  // 连接其他broker
 	for(i=0; i<config.bridge_count; i++){
 		if(mqtt3_bridge_new(&int_db, &(config.bridges[i]))){
 			_mosquitto_log_printf(NULL, MOSQ_LOG_WARNING, "Warning: Unable to connect to bridge %s.",
@@ -315,9 +333,7 @@ int main(int argc, char *argv[])
 	}
 
 	run = 1;
-  // TODO 明天开始改这里，把所有的with_broker和with_bridge去掉。并且对共享资源context增加锁
 	rc = mosquitto_main_loop(&int_db, listensock, listensock_count, listener_max);
-
 
   // 主循环结束，server端关闭
   // 做一些资源清理和备份操作

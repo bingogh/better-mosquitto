@@ -65,12 +65,11 @@ extern int g_clients_expired;
 /* static void loop_handle_errors(struct mosquitto_db *db, struct kevent *); */
 static void do_disconnect(struct mosquitto_db *db, int fd);
 
-void diep(const char *s);
-int conn_delete(int fd);
-int loop_push_update_db_context(int fd, short n,struct mosquitto_funcs_data *arg);
+int push_update_db_context(int fd, short n,struct mosquitto_funcs_data *arg);
 
 //打开监听套接字后，就可以进入消息事件循环
-int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock_count, int listener_max)
+int
+mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock_count, int listener_max)
 {
   struct event *ev;
   pthread_t tid;
@@ -102,12 +101,12 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
       event_add(ev, NULL);
     }
 
-  ev = event_new(base, -1, EV_PERSIST, loop_push_update_db_context, &funcs_data);
+  ev = event_new(base, -1, EV_PERSIST, push_update_db_context, &funcs_data);
   if(!ev){
     _mosquitto_log_printf(NULL, MOSQ_LOG_ERR, "Error: Out of memory.");
     return MOSQ_ERR_NOMEM;
   }
-  // 每500毫秒跑一次
+  // TODO better way to handle this
   tv.tv_sec = 1;
   tv.tv_usec = 0;
   evtimer_add(ev, &tv);
@@ -119,21 +118,13 @@ int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock
 
 
 // TODO 拆分这里的逻辑
-int loop_push_update_db_context(int fd, short n, struct mosquitto_funcs_data *arg)
+int
+push_update_db_context(int fd, short n, struct mosquitto_funcs_data *arg)
 {
  	int time_count;
-#ifndef WIN32
-	sigset_t sigblock, origsig;
-#endif
 	int i;
 	int bridge_sock;
 	int rc;
-
-  //TODO 添加信号监听机制
-#ifndef WIN32
-	sigemptyset(&sigblock);
-	sigaddset(&sigblock, SIGINT);
-#endif
 
   time_t now;
   struct mosquitto_db *db = arg->db;
@@ -144,13 +135,10 @@ int loop_push_update_db_context(int fd, short n, struct mosquitto_funcs_data *ar
 	time_t last_backup = mosquitto_time();
 	time_t last_store_clean = mosquitto_time();
 
-  // TODO 移动一个定时任务里面去
 #ifdef WITH_SYS_TREE
-  // TODO check this to see how send message work
+  // 更新sys信息，把这些信息都插入到特定的某些系统主题下，开放给订阅者
   mqtt3_db_sys_update(db, db->config->sys_interval, start_time);
 #endif
-
-  printf("we are pushing context msgs\n");
 
   //遍历每一个客户端连接,尝试将其加入监听队列里面
   time_count = 0;
@@ -166,10 +154,9 @@ int loop_push_update_db_context(int fd, short n, struct mosquitto_funcs_data *ar
       // 客户端在线
       if(db->contexts[i]->sock != INVALID_SOCKET){
 
-        // 处理bridge情况
+        // 检测bridge的连接情况，超时就关闭掉
+        // 并重连broker
         if(db->contexts[i]->bridge){
-          // 检测连接的监控情况
-          // 对bridge和普通client的处理不一样，但大致意思都是超时就断掉
           _mosquitto_check_keepalive(db->contexts[i]);
           if(db->contexts[i]->bridge->round_robin == false
              && db->contexts[i]->bridge->cur_address != 0
@@ -177,20 +164,20 @@ int loop_push_update_db_context(int fd, short n, struct mosquitto_funcs_data *ar
 
             /* FIXME - this should be non-blocking */
             // broker的连接策略可以看下man mosquitto.conf 的说明，比较清晰点
-            // TODO 这里的重连策略到底是怎么样的？
-            if(_mosquitto_try_connect(db->contexts[i]->bridge->addresses[0].address, db->contexts[i]->bridge->addresses[0].port, &bridge_sock, NULL, true) == MOSQ_ERR_SUCCESS){
+            if(_mosquitto_try_connect(db->contexts[i]->bridge->addresses[0].address, db->contexts[i]->bridge->addresses[0].port, &bridge_sock, NULL, true) == MOSQ_ERR_SUCCESS){ //TODO 这里的逻辑好奇怪
               COMPAT_CLOSE(bridge_sock);
               _mosquitto_socket_close(db->contexts[i]);
-              db->contexts[i]->bridge->cur_address = db->contexts[i]->bridge->address_count-1; // 不断的去测试新bridge地址...
+              db->contexts[i]->bridge->cur_address = db->contexts[i]->bridge->address_count-1; // 告诉下一次连接的时候，直接连接主bridge地址上
             }
           }
         }
 
+        // 发送堆积的消息，并清除超时的连接
         /* Local bridges never time out in this fashion. */
         if(!(db->contexts[i]->keepalive)
            || db->contexts[i]->bridge
            || now - db->contexts[i]->last_msg_in < (time_t)(db->contexts[i]->keepalive)*3/2){
-          //在进入poll等待之前，先尝试将未发送的数据发送出去
+          //先尝试把堆积在每个context下面的信息发送出去
           if(mqtt3_db_message_write(db->contexts[i]) == MOSQ_ERR_SUCCESS){
             // silence is god.
           }else{ //尝试发送失败，连接出问题了
@@ -205,7 +192,16 @@ int loop_push_update_db_context(int fd, short n, struct mosquitto_funcs_data *ar
         }
       }else{
 
-        // 客户端不在线的情况
+        // 处理客户端不在线的情况
+
+        /* start_type [ automatic | lazy | once ] */
+        /* Set the start type of the bridge. This controls how the bridge starts and can be one of three types: automatic, lazy and once. Note that RSMB provides a fourth start type "manual" which isn't currently supported by mosquitto. */
+        /* automatic is the default start type and means that the bridge connection will be started automatically when the broker starts and also restarted after a short delay (30 seconds) if the connection fails. */
+        /* Bridges using the lazy start type will be started automatically when the number of queued messages exceeds the number set with the threshold option. It will be stopped automatically after the time set by the idle_timeout parameter. */
+        /* Use this start type if you wish the connection to only be active when it is needed. */
+        /* A bridge using the once start type will be started automatically when the broker starts but will not be restarted if the connection fails.' */
+
+        // 上一次的bridge连接没建立成功
         if(db->contexts[i]->bridge){
           /* Want to try to restart the bridge connection */
           if(!db->contexts[i]->bridge->restart_t){
@@ -229,6 +225,7 @@ int loop_push_update_db_context(int fd, short n, struct mosquitto_funcs_data *ar
               }
             }
 
+            // bst --> bridge start type, restart_t ==  30s
             if(db->contexts[i]->bridge->start_type == bst_automatic && now > db->contexts[i]->bridge->restart_t){
               db->contexts[i]->bridge->restart_t = 0;
               rc = mqtt3_bridge_connect(db, db->contexts[i]);
@@ -339,7 +336,6 @@ static void do_disconnect(struct mosquitto_db *db, int fd)
 
   int context_index=0;
 
-  //TODO better handle context sock disconn
   for (int i = 0; i < db->context_count; ++i)
     {
       if (db->contexts[context_index]->sock == fd)
@@ -384,11 +380,6 @@ void loop_handle_reads_writes(int fd, short ev, void *arg)
 {//mosquitto_main_loop调用这里来处理客户端连接的读写事件
   int i;
   struct mosquitto_db *db = arg;
-
-  if ( 1 )
-    {
-      printf("hello\n");
-    }
 
   //TODO 这里可以弄个hash tabble来O(1)的效率
   for(i=0; i<db->context_count; i++){
@@ -460,16 +451,4 @@ void loop_handle_reads_writes(int fd, short ev, void *arg)
 
   } // end of for loop
 
-}
-
-void
-diep(const char *s)
-{
-  perror(s);
-  exit(EXIT_FAILURE);
-}
-
-int
-conn_delete(int fd) {
-  return close(fd);
 }

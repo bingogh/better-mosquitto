@@ -58,6 +58,7 @@ int _mosquitto_will_set(struct mosquitto *mosq, const char *topic, int payloadle
 	if(payloadlen < 0 || payloadlen > MQTT_MAX_PAYLOAD) return MOSQ_ERR_PAYLOAD_SIZE;
 	if(payloadlen > 0 && !payload) return MOSQ_ERR_INVAL;
 
+  // 清除旧的will内容
 	if(mosq->will){
 		if(mosq->will->topic){
 			_mosquitto_free(mosq->will->topic);
@@ -71,6 +72,7 @@ int _mosquitto_will_set(struct mosquitto *mosq, const char *topic, int payloadle
 		mosq->will = NULL;
 	}
 
+  // 分配新的空间和填充will内容
 	mosq->will = _mosquitto_calloc(1, sizeof(struct mosquitto_message));
 	if(!mosq->will) return MOSQ_ERR_NOMEM;
 	mosq->will->topic = _mosquitto_strdup(topic);
@@ -79,6 +81,7 @@ int _mosquitto_will_set(struct mosquitto *mosq, const char *topic, int payloadle
 		goto cleanup;
 	}
 	mosq->will->payloadlen = payloadlen;
+  // 这里再去判断一次长度和内容，其实就相当于允许执行一个reset will内容的操作
 	if(mosq->will->payloadlen > 0){
 		if(!payload){
 			rc = MOSQ_ERR_INVAL;
@@ -125,4 +128,3 @@ int _mosquitto_will_clear(struct mosquitto *mosq)
 
 	return MOSQ_ERR_SUCCESS;
 }
-

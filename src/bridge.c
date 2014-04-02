@@ -64,12 +64,17 @@ int mqtt3_bridge_new(struct mosquitto_db *db, struct _mqtt3_bridge *bridge)
 	char hostname[256];
 	int len;
 	char *id;
+  int ret;
 
 	assert(db);
 	assert(bridge);
 
+  // 构造bridge的id值，用来标识一个bridge，具体的构造规则可以参考mosquitto.conf文件
 	if(bridge->clientid){
 		id = _mosquitto_strdup(bridge->clientid);
+    if(!id){
+      return MOSQ_ERR_NOMEM;
+    }
 	}else{
 		if(!gethostname(hostname, 256)){
 			len = strlen(hostname) + strlen(bridge->name) + 2;
@@ -77,13 +82,15 @@ int mqtt3_bridge_new(struct mosquitto_db *db, struct _mqtt3_bridge *bridge)
 			if(!id){
 				return MOSQ_ERR_NOMEM;
 			}
-			snprintf(id, len, "%s.%s", hostname, bridge->name);
+			ret = snprintf(id, len, "%s.%s", hostname, bridge->name);
+      // TODO 防御性编程？
+      if (ret<0) //赋值出错了
+        {
+          return 1;
+        }
 		}else{
 			return 1;
 		}
-	}
-	if(!id){
-		return MOSQ_ERR_NOMEM;
 	}
 
 	/* Search for existing id (possible from persistent db) and also look for a
@@ -94,21 +101,24 @@ int mqtt3_bridge_new(struct mosquitto_db *db, struct _mqtt3_bridge *bridge)
 				new_context = db->contexts[i];
 				break;
 			}
-		}else if(db->contexts[i] == NULL && null_index == -1){
+		}else{
 			null_index = i;
 			break;
 		}
 	}
+
 	if(!new_context){
+
 		/* id wasn't found, so generate a new context */
 		new_context = mqtt3_context_init(-1);
 		if(!new_context){
 			return MOSQ_ERR_NOMEM;
 		}
+
 		if(null_index == -1){
 			/* There were no gaps in the db->contexts[] array, so need to append. */
 			db->context_count++;
-			tmp_contexts = _mosquitto_realloc(db->contexts, sizeof(struct mosquitto*)*db->context_count);
+			tmp_contexts = _mosquitto_realloc(db->contexts, sizeof(struct mosquitto*)*db->context_count); //TODO realloc的策略可以改改，不要每次都只分配一个，可以根据使用量、使用场景进行更有效的内存分配
 			if(tmp_contexts){
 				db->contexts = tmp_contexts;
 				db->contexts[db->context_count-1] = new_context;
@@ -124,6 +134,7 @@ int mqtt3_bridge_new(struct mosquitto_db *db, struct _mqtt3_bridge *bridge)
 		/* id was found, so context->id already in memory. */
 		_mosquitto_free(id);
 	}
+
 	new_context->bridge = bridge;
 	new_context->is_bridge = true;
 
@@ -167,7 +178,9 @@ int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context)
 	context->in_packet.payload = NULL;
 	context->ping_t = 0;
 	context->bridge->lazy_reconnect = false;
+  // 释放掉所有残留未发出去和接收到的包
 	mqtt3_bridge_packet_cleanup(context);
+  // 把积压的消息状态进行变更
 	mqtt3_db_message_reconnect_reset(context);
 
 	if(context->clean_session){
@@ -179,7 +192,7 @@ int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context)
 	 * anyway. This means any unwanted subs will be removed.
 	 */
 	mqtt3_subs_clean_session(db, context, &db->subs);
-
+  // 删除所有订阅后，重新订阅一次
 	for(i=0; i<context->bridge->topic_count; i++){
 		if(context->bridge->topics[i].direction == bd_out || context->bridge->topics[i].direction == bd_both){
 			_mosquitto_log_printf(NULL, MOSQ_LOG_DEBUG, "Bridge %s doing local SUBSCRIBE on topic %s", context->id, context->bridge->topics[i].local_topic);
@@ -190,6 +203,7 @@ int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context)
   // 设置notifications的提醒，如果没设置，就用默认的
 	if(context->bridge->notifications){
 		notification_payload = '0';
+    // 如果提醒是在某个主题下
 		if(context->bridge->notification_topic){
 			mqtt3_db_messages_easy_queue(db, context, context->bridge->notification_topic, 1, 1, &notification_payload, 1);
 			rc = _mosquitto_will_set(context, context->bridge->notification_topic, 1, &notification_payload, 1, true);
@@ -197,6 +211,7 @@ int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context)
 				return rc;
 			}
 		}else{
+      // 把提醒塞到默认的主题下
 			notification_topic_len = strlen(context->id)+strlen("$SYS/broker/connection//state");
 			notification_topic = _mosquitto_malloc(sizeof(char)*(notification_topic_len+1));
 			if(!notification_topic) return MOSQ_ERR_NOMEM;
@@ -213,13 +228,14 @@ int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context)
 	}
 
 	_mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Connecting bridge %s (%s:%d)", context->bridge->name, context->bridge->addresses[context->bridge->cur_address].address, context->bridge->addresses[context->bridge->cur_address].port);
+  // FIXME 这里只用了单一的一个地址而已
 	rc = _mosquitto_socket_connect(context, context->bridge->addresses[context->bridge->cur_address].address, context->bridge->addresses[context->bridge->cur_address].port, NULL, true);
 	if(rc != MOSQ_ERR_SUCCESS){
 		if(rc == MOSQ_ERR_TLS){
 			return rc; /* Error already printed */
 		}else if(rc == MOSQ_ERR_ERRNO){
 			_mosquitto_log_printf(NULL, MOSQ_LOG_ERR, "Error creating bridge: %s.", strerror(errno));
-		}else if(rc == MOSQ_ERR_EAI){
+		}else if(rc == MOSQ_ERR_EAI){ // EAI??
 			_mosquitto_log_printf(NULL, MOSQ_LOG_ERR, "Error creating bridge: %s.", gai_strerror(errno));
 		}
 
@@ -243,21 +259,25 @@ int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context)
 		_mosquitto_socket_close(context);
 		return rc;
 	}
+
 }
 
+
+// 释放掉所有残留未发出去和接收到的包
 void mqtt3_bridge_packet_cleanup(struct mosquitto *context)
 {
 	struct _mosquitto_packet *packet;
 	if(!context) return;
 
 	_mosquitto_packet_cleanup(context->current_out_packet);
-    while(context->out_packet){
+  while(context->out_packet){
 		_mosquitto_packet_cleanup(context->out_packet);
 		packet = context->out_packet;
 		context->out_packet = context->out_packet->next;
 		_mosquitto_free(packet);
 	}
 
+  // TODO mosquitto对入包的管理非常奇怪，难道只是用一个in_packet就搞定了所有的入包么...
 	_mosquitto_packet_cleanup(&(context->in_packet));
 }
 

@@ -114,8 +114,6 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *a
 	new_sock = accept(listensock, NULL, 0);
 	if(new_sock == INVALID_SOCKET) return -1;
 
-  printf("new sock accept\n");
-
 #ifdef WITH_SYS_TREE
 	g_socket_connections++;
 #endif
@@ -244,7 +242,6 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *a
 	}
 #endif
 
-  printf("没有在内存分配这里挂了\n");
   event = event_new(base, new_sock, EV_READ|EV_PERSIST, loop_handle_reads_writes, db);
   if (!event)
     {
@@ -256,8 +253,7 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *a
     new_context->event = event;
   }
   event_add(event, NULL);
-  printf("没有在event_add这里挂了\n");
-  printf("分配到的socket%d\n",new_sock);
+
 	return new_sock;
 }
 
@@ -340,7 +336,7 @@ int mqtt3_socket_listen(struct _mqtt3_listener *listener)
 	snprintf(service, 10, "%d", listener->port);
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = PF_UNSPEC;
-	hints.ai_flags = AI_PASSIVE;
+	/* hints.ai_flags = AI_PASSIVE; */
 	hints.ai_socktype = SOCK_STREAM;
   //导致下面返回多个链表节的的因素可能有：
   //hostname参数关联的地址有多个，那么每个返回一个节点；比如host为域名的时候，nslookup返回几个ip就有几个
@@ -557,6 +553,7 @@ int mqtt3_socket_listen(struct _mqtt3_listener *listener)
 	}
 }
 
+// 获取socket对应的ip地址和端口信息
 int _mosquitto_socket_get_address(int sock, char *buf, int len)
 {
 	struct sockaddr_storage addr;

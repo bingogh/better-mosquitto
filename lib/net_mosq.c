@@ -173,6 +173,7 @@ int _mosquitto_packet_queue(struct mosquitto *mosq, struct _mosquitto_packet *pa
 
 }
 
+//FIXME del event here
 /* Close a socket associated with a context and set it to -1.
  * Returns 1 on failure (context is NULL)
  * Returns 0 on success.
@@ -198,6 +199,14 @@ int _mosquitto_socket_close(struct mosquitto *mosq)
 		rc = COMPAT_CLOSE(mosq->sock);
 		mosq->sock = INVALID_SOCKET;
 	}
+
+  // 取消context的event事件
+  if (mosq->event)
+    {
+      rc = event_del(mosq->event);
+      free(mosq->event);
+      mosq->event = NULL;
+    }
 
 	return rc;
 }
@@ -238,7 +247,7 @@ int _mosquitto_try_connect(const char *host, uint16_t port, int *sock, const cha
 	*sock = INVALID_SOCKET;
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = PF_UNSPEC;
-	hints.ai_flags = AI_ADDRCONFIG;
+	hints.ai_flags = AI_ADDRCONFIG; //
 	hints.ai_socktype = SOCK_STREAM;
 
 	s = getaddrinfo(host, NULL, &hints, &ainfo);
@@ -251,12 +260,13 @@ int _mosquitto_try_connect(const char *host, uint16_t port, int *sock, const cha
 		s = getaddrinfo(bind_address, NULL, &hints, &ainfo_bind);
 		if(s){
 			freeaddrinfo(ainfo);
-			errno = s;
-			return MOSQ_ERR_EAI;
+	 		errno = s;
+			return MOSQ_ERR_EAI; //FIXME 这种是啥错误？
 		}
 	}
 
-	for(rp = ainfo; rp != NULL; rp = rp->ai_next){
+  for(rp = ainfo; rp != NULL; rp = rp->ai_next){
+    // 从ainfo里面拿到可能的ip:port对，生成socket后，设置nonbloking，然后再去做连接操作
 		*sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 		if(*sock == INVALID_SOCKET) continue;
 
@@ -503,6 +513,20 @@ int _mosquitto_socket_connect(struct mosquitto *mosq, const char *host, uint16_t
 #endif
 
 	mosq->sock = sock;
+
+  // TODO 2014.04.02
+  // FIXME libevent的逻辑应该隐藏在broker的情况下
+  /* event = event_new(base, sock, EV_READ|EV_PERSIST, loop_handle_reads_writes, db); */
+  /* if (!event) */
+  /*   { */
+  /*     // can not accept more events */
+  /*     // TODO better data clean up */
+  /*     new_context->sock = INVALID_SOCKET; */
+  /*     return -1; */
+  /*   }else{ */
+  /*   new_context->event = event; */
+  /* } */
+  /* event_add(event, NULL); */
 
 	return MOSQ_ERR_SUCCESS;
 }

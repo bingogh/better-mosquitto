@@ -58,6 +58,18 @@ POSSIBILITY OF SUCH DAMAGE.
  *	a/b/d
  */
 
+// mosquitto订阅信息结构的具体实现
+// 每一个[]符号为一个struct _mosquitto_subhier结构，有children指向同级别的其他branch（即图中的本行）
+// subs指针则指向订阅的客户端（也是链表结构），topic结构代表内容
+// 假设我们有如下订阅： /a/b/c/f /a/b/d ，则内部的订阅树会生成如下结构
+/* [ /a ] -> [ ] -> [ ] -> .. */
+ /*   \ */
+ /*   [ /b ]->[ ]->.. */
+ /*     \ */
+ /*     [ /c ]->[ /d ]->... */
+ /*        \ */
+ /*       [ /f ]->... */
+
 #include <config.h>
 
 #include <assert.h>
@@ -557,6 +569,7 @@ static int _subs_clean_session(struct mosquitto_db *db, struct mosquitto *contex
 
 	if(!root) return MOSQ_ERR_SUCCESS;
 
+  // 从删除的逻辑看，在这个branch下的客户端是可以多次的？
 	leaf = root->subs;
 	while(leaf){
 		if(leaf->context == context){
@@ -577,8 +590,10 @@ static int _subs_clean_session(struct mosquitto_db *db, struct mosquitto *contex
 		}
 	}
 
+  //
 	child = root->children;
 	while(child){
+    // 递归删除子branch
 		_subs_clean_session(db, context, child);
 		if(!child->children && !child->subs && !child->retained){
 			if(last){
@@ -598,6 +613,7 @@ static int _subs_clean_session(struct mosquitto_db *db, struct mosquitto *contex
 			child = child->next;
 		}
 	}
+
 	return rc;
 }
 

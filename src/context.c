@@ -37,6 +37,8 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "uthash.h"
 
+
+//
 struct mosquitto *mqtt3_context_init(int sock)
 {
 	struct mosquitto *context;
@@ -86,8 +88,9 @@ struct mosquitto *mqtt3_context_init(int sock)
 	context->ssl = NULL;
 #endif
 
-  // initialize here?
-  /* context->event = NULL; */
+  // 每个context在循环里面的事件
+  context->event = NULL;
+
 	return context;
 }
 
@@ -204,13 +207,6 @@ void mqtt3_context_disconnect(struct mosquitto_db *db, struct mosquitto *ctxt)
 		ctxt->listener = NULL;
 	}
 	ctxt->disconnect_t = mosquitto_time();
-
-  // 取消context的event事件
-  if (ctxt->event)
-    {
-      event_del(ctxt->event);
-      ctxt->event = NULL;
-    }
 
 	_mosquitto_socket_close(ctxt);
 

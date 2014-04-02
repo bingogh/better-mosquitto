@@ -168,6 +168,8 @@ int mqtt3_db_client_count(struct mosquitto_db *db, unsigned int *count, unsigned
 	return MOSQ_ERR_SUCCESS;
 }
 
+// 删除某个客户端下的某条消息
+// 同时对客户端里面的每条信息状态进行修改
 int mqtt3_db_message_delete(struct mosquitto *context, uint16_t mid, enum mosquitto_msg_direction dir)
 {
 	struct mosquitto_client_msg *tail, *last = NULL;
@@ -195,10 +197,13 @@ int mqtt3_db_message_delete(struct mosquitto *context, uint16_t mid, enum mosqui
 				}
 			}else{
 				if(tail->qos == 2){
+          // 这里的基本假设是服务器（即我自己）已经发了一个PUBREC包给客户端了，
+          // 等待客户端的PUBREL包回来。合理吗？
 					tail->state = mosq_ms_wait_for_pubrel;
 				}
 			}
 		}
+
 		if(tail->mid == mid && tail->direction == dir){
 			msg_index--;
 			/* FIXME - it would be nice to be able to remove the stored message here if ref_count==0 */
@@ -426,6 +431,7 @@ int mqtt3_db_message_update(struct mosquitto *context, uint16_t mid, enum mosqui
 	return 1;
 }
 
+// 删掉当前context的所有msgs信息
 int mqtt3_db_messages_delete(struct mosquitto *context)
 {
 	struct mosquitto_client_msg *tail, *next;
@@ -566,6 +572,7 @@ int mqtt3_db_message_store_find(struct mosquitto *context, uint16_t mid, struct 
 	return 1;
 }
 
+// TODO 再看下这里的逻辑
 /* Called on reconnect to set outgoing messages to a sensible state and force a
  * retry, and to set incoming messages to expect an appropriate retry. */
 int mqtt3_db_message_reconnect_reset(struct mosquitto *context)
@@ -594,7 +601,9 @@ int mqtt3_db_message_reconnect_reset(struct mosquitto *context)
 						break;
 				}
 			}
-		}else{
+		}else{// msg方向为in的情况下
+
+      // 小于2的话，直接扔掉，让客户端重新发一次
 			if(msg->qos != 2){
 				/* Anything <QoS 2 can be completely retried by the client at
 				 * no harm. */
@@ -609,19 +618,26 @@ int mqtt3_db_message_reconnect_reset(struct mosquitto *context)
 					msg = context->msgs;
 				}
 			}else{
+
 				/* Message state can be preserved here because it should match
 				 * whatever the client has got. */
+        // 为什么这里不用做任何进一步的处理呢？
+
 			}
 		}
 		prev = msg;
 		if(msg) msg = msg->next;
 	}
+
 	/* Messages received when the client was disconnected are put
 	 * in the mosq_ms_queued state. If we don't change them to the
 	 * appropriate "publish" state, then the queued messages won't
 	 * get sent until the client next receives a message - and they
 	 * will be sent out of order.
 	 */
+
+  // 剩下的这些msgs处理很显然是针对out方向的信息
+  // 或者入方向的信息，且qos为2，而且已经入队的
 	if(context->msgs){
 		count = 0;
 		msg = context->msgs;
