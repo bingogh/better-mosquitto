@@ -320,6 +320,7 @@ struct _mqtt3_bridge{
 struct mosquitto_funcs_data {
   struct mosquitto_db * db;
   struct event_base *base;
+  struct mosquitto  *context;
 };
 
 #include <net_mosq.h>
@@ -327,7 +328,7 @@ struct mosquitto_funcs_data {
 /* ============================================================
  * Main functions
  * ============================================================ */
-int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock_count, int listener_max);
+int mosquitto_main_loop(struct mosquitto_db *db, int *listensock, int listensock_count, int listener_max, struct event_base *base);
 struct mosquitto_db *_mosquitto_get_db(void);
 
 /* ============================================================
@@ -358,7 +359,7 @@ int mqtt3_socket_accept(int fd, short ev, struct mosquitto_funcs_data *);
 int mqtt3_socket_listen(struct _mqtt3_listener *listener);
 int _mosquitto_socket_get_address(int sock, char *buf, int len);
 /* Libevent */
-void loop_handle_reads_writes(int fd, short ev, void *arg);
+void handle_reads_writes(int fd, short ev, void *arg);
 void mosquitto_read_cb(struct bufferevent *bev, void *arg);
 void mosquitto_error_cb(struct bufferevent *bev, short event, void *arg);
 void mosquitto_write_cb(struct bufferevent *bev, void *arg);
@@ -432,8 +433,8 @@ int _mosquitto_log_printf(struct mosquitto *mosq, int level, const char *fmt, ..
  * Bridge functions
  * ============================================================ */
 #ifdef WITH_BRIDGE
-int mqtt3_bridge_new(struct mosquitto_db *db, struct _mqtt3_bridge *bridge);
-int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context);
+int mqtt3_bridge_new(struct mosquitto_db *db, struct _mqtt3_bridge *bridge, struct event_base *base);
+int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context, struct event_base *base);
 void mqtt3_bridge_packet_cleanup(struct mosquitto *context);
 #endif
 

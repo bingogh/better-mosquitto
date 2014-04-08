@@ -242,7 +242,8 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *a
 	}
 #endif
 
-  event = event_new(base, new_sock, EV_READ|EV_PERSIST, loop_handle_reads_writes, db);
+  args->context = new_context;
+  event = event_new(base, new_sock, EV_READ|EV_PERSIST, handle_reads_writes, args);
   if (!event)
     {
       // can not accept more events

@@ -177,6 +177,9 @@ int main(int argc, char *argv[])
 	int rc;
 	char err[256];
 
+  /* Initial libevent. */
+  struct event_base *base = event_base_new();
+
 
   // TODO 查看下windows平台的代码
 #if defined(WIN32) || defined(__CYGWIN__)
@@ -326,14 +329,14 @@ int main(int argc, char *argv[])
 
   // 连接其他broker
 	for(i=0; i<config.bridge_count; i++){
-		if(mqtt3_bridge_new(&int_db, &(config.bridges[i]))){
+		if(mqtt3_bridge_new(&int_db, &(config.bridges[i]), base)){
 			_mosquitto_log_printf(NULL, MOSQ_LOG_WARNING, "Warning: Unable to connect to bridge %s.",
                             config.bridges[i].name);
 		}
 	}
 
 	run = 1;
-	rc = mosquitto_main_loop(&int_db, listensock, listensock_count, listener_max);
+	rc = mosquitto_main_loop(&int_db, listensock, listensock_count, listener_max, base);
 
   // 主循环结束，server端关闭
   // 做一些资源清理和备份操作

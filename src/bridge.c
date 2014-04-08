@@ -55,7 +55,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef WITH_BRIDGE
 
-int mqtt3_bridge_new(struct mosquitto_db *db, struct _mqtt3_bridge *bridge)
+int mqtt3_bridge_new(struct mosquitto_db *db, struct _mqtt3_bridge *bridge, struct event_base *base)
 {
 	int i;
 	struct mosquitto *new_context = NULL;
@@ -68,6 +68,7 @@ int mqtt3_bridge_new(struct mosquitto_db *db, struct _mqtt3_bridge *bridge)
 
 	assert(db);
 	assert(bridge);
+  assert(base);
 
   // 构造bridge的id值，用来标识一个bridge，具体的构造规则可以参考mosquitto.conf文件
 	if(bridge->clientid){
@@ -156,10 +157,10 @@ int mqtt3_bridge_new(struct mosquitto_db *db, struct _mqtt3_bridge *bridge)
 
 	bridge->try_private_accepted = true;
 
-	return mqtt3_bridge_connect(db, new_context);
+	return mqtt3_bridge_connect(db, new_context, base);
 }
 
-int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context)
+int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context, struct event_base *base)
 {
 	int rc;
 	int i;
@@ -229,7 +230,7 @@ int mqtt3_bridge_connect(struct mosquitto_db *db, struct mosquitto *context)
 
 	_mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Connecting bridge %s (%s:%d)", context->bridge->name, context->bridge->addresses[context->bridge->cur_address].address, context->bridge->addresses[context->bridge->cur_address].port);
   // FIXME 这里只用了单一的一个地址而已
-	rc = _mosquitto_socket_connect(context, context->bridge->addresses[context->bridge->cur_address].address, context->bridge->addresses[context->bridge->cur_address].port, NULL, true);
+	rc = _mosquitto_socket_connect(context, context->bridge->addresses[context->bridge->cur_address].address, context->bridge->addresses[context->bridge->cur_address].port, NULL, true, base);
 	if(rc != MOSQ_ERR_SUCCESS){
 		if(rc == MOSQ_ERR_TLS){
 			return rc; /* Error already printed */

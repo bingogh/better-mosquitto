@@ -173,7 +173,6 @@ int _mosquitto_packet_queue(struct mosquitto *mosq, struct _mosquitto_packet *pa
 
 }
 
-//FIXME del event here
 /* Close a socket associated with a context and set it to -1.
  * Returns 1 on failure (context is NULL)
  * Returns 0 on success.
@@ -200,6 +199,7 @@ int _mosquitto_socket_close(struct mosquitto *mosq)
 		mosq->sock = INVALID_SOCKET;
 	}
 
+#ifdef WITH_BROKER
   // 取消context的event事件
   if (mosq->event)
     {
@@ -207,6 +207,7 @@ int _mosquitto_socket_close(struct mosquitto *mosq)
       free(mosq->event);
       mosq->event = NULL;
     }
+#endif
 
 	return rc;
 }
@@ -346,13 +347,22 @@ int _mosquitto_try_connect(const char *host, uint16_t port, int *sock, const cha
  * Returns -1 on failure (ip is NULL, socket creation/connection error)
  * Returns sock number on success.
  */
+#ifdef WITH_BROKER
+int _mosquitto_socket_connect(struct mosquitto *mosq, const char *host, uint16_t port, const char *bind_address, bool blocking, struct mosquitto_funcs_data *data)
+#else
 int _mosquitto_socket_connect(struct mosquitto *mosq, const char *host, uint16_t port, const char *bind_address, bool blocking)
+#endif
 {
 	int sock = INVALID_SOCKET;
 	int rc;
 #ifdef WITH_TLS
 	int ret;
 	BIO *bio;
+#endif
+#ifdef WITH_BROKER
+  struct mosquitto_db *db = data->db;
+  struct event_base *base = data->base;
+  struct event * event;
 #endif
 
 	if(!mosq || !host || !port) return MOSQ_ERR_INVAL;
@@ -514,19 +524,20 @@ int _mosquitto_socket_connect(struct mosquitto *mosq, const char *host, uint16_t
 
 	mosq->sock = sock;
 
-  // TODO 2014.04.02
-  // FIXME libevent的逻辑应该隐藏在broker的情况下
-  /* event = event_new(base, sock, EV_READ|EV_PERSIST, loop_handle_reads_writes, db); */
-  /* if (!event) */
-  /*   { */
-  /*     // can not accept more events */
-  /*     // TODO better data clean up */
-  /*     new_context->sock = INVALID_SOCKET; */
-  /*     return -1; */
-  /*   }else{ */
-  /*   new_context->event = event; */
-  /* } */
-  /* event_add(event, NULL); */
+#ifdef WITH_BROKER
+  data->context = mosq;
+  event = event_new(base, sock, EV_READ|EV_PERSIST, handle_reads_writes, data);
+  if (!event)
+    {
+      // can not accept more events
+      // TODO better data clean up
+      mosq->sock = INVALID_SOCKET;
+      return -1;
+    }else{
+    mosq->event = event;
+  }
+  event_add(event, NULL);
+#endif
 
 	return MOSQ_ERR_SUCCESS;
 }
