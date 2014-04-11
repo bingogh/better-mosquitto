@@ -261,13 +261,13 @@ int mosquitto_username_pw_set(struct mosquitto *mosq, const char *username, cons
 int mosquitto_reconnect_delay_set(struct mosquitto *mosq, unsigned int reconnect_delay, unsigned int reconnect_delay_max, bool reconnect_exponential_backoff)
 {
 	if(!mosq) return MOSQ_ERR_INVAL;
-	
+
 	mosq->reconnect_delay = reconnect_delay;
 	mosq->reconnect_delay_max = reconnect_delay_max;
 	mosq->reconnect_exponential_backoff = reconnect_exponential_backoff;
-	
+
 	return MOSQ_ERR_SUCCESS;
-	
+
 }
 
 void _mosquitto_destroy(struct mosquitto *mosq)
@@ -461,7 +461,7 @@ static int _mosquitto_reconnect(struct mosquitto *mosq, bool blocking)
 	mosq->ping_t = 0;
 
 	_mosquitto_packet_cleanup(&mosq->in_packet);
-		
+
 	pthread_mutex_lock(&mosq->current_out_packet_mutex);
 	pthread_mutex_lock(&mosq->out_packet_mutex);
 
@@ -506,6 +506,7 @@ int mosquitto_disconnect(struct mosquitto *mosq)
 	return _mosquitto_send_disconnect(mosq);
 }
 
+// 暴露给客户端调用的pub方法
 int mosquitto_publish(struct mosquitto *mosq, int *mid, const char *topic, int payloadlen, const void *payload, int qos, bool retain)
 {
 	struct mosquitto_message_all *message;
@@ -524,6 +525,7 @@ int mosquitto_publish(struct mosquitto *mosq, int *mid, const char *topic, int p
 		*mid = local_mid;
 	}
 
+  // qos等级不同，处理逻辑也不同
 	if(qos == 0){
 		return _mosquitto_send_publish(mosq, local_mid, topic, payloadlen, payload, qos, retain, false);
 	}else{
@@ -894,7 +896,7 @@ int mosquitto_loop_forever(struct mosquitto *mosq, int timeout, int max_packets)
 			}else{
 				reconnects++;
 			}
-				
+
 #ifdef WIN32
 			Sleep(reconnect_delay*1000);
 #else
@@ -1221,4 +1223,3 @@ int mosquitto_sub_topic_tokens_free(char ***topics, int count)
 
 	return MOSQ_ERR_SUCCESS;
 }
-

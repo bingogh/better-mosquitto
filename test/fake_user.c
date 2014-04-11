@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 	int keepalive = 60;
 	bool clean_session = false;
 	struct mosquitto *mosq = NULL;
-	
+
 	void *will_payload = NULL;
 	long will_payloadlen = 0;
 	int will_qos = 0;
@@ -111,4 +111,3 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-

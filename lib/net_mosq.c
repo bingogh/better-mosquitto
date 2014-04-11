@@ -141,6 +141,7 @@ void _mosquitto_packet_cleanup(struct _mosquitto_packet *packet)
 
 int _mosquitto_packet_queue(struct mosquitto *mosq, struct _mosquitto_packet *packet)
 {
+
 	assert(mosq);
 	assert(packet);
 
@@ -149,7 +150,6 @@ int _mosquitto_packet_queue(struct mosquitto *mosq, struct _mosquitto_packet *pa
 
 	packet->next = NULL;
 
-  // TODO 为什么这里用线程锁
 	pthread_mutex_lock(&mosq->out_packet_mutex);
 	if(mosq->out_packet){
 		mosq->out_packet_last->next = packet;
@@ -169,7 +169,6 @@ int _mosquitto_packet_queue(struct mosquitto *mosq, struct _mosquitto_packet *pa
 		return MOSQ_ERR_SUCCESS;
 	}
 #endif
-
 
 }
 
@@ -737,7 +736,6 @@ ssize_t _mosquitto_net_write(struct mosquitto *mosq, void *buf, size_t count)
 #endif
 }
 
-//TODO 解决这里多锁的问题
 int _mosquitto_packet_write(struct mosquitto *mosq)
 {
 	ssize_t write_length;
@@ -750,7 +748,6 @@ int _mosquitto_packet_write(struct mosquitto *mosq)
   // 为什么这里要加锁？？
 	pthread_mutex_lock(&mosq->current_out_packet_mutex);
 	pthread_mutex_lock(&mosq->out_packet_mutex);
-
 
 	if(mosq->out_packet && !mosq->current_out_packet){
 		mosq->current_out_packet = mosq->out_packet;
@@ -779,6 +776,7 @@ int _mosquitto_packet_write(struct mosquitto *mosq)
 				errno = WSAGetLastError();
 #endif
 				if(errno == EAGAIN || errno == COMPAT_EWOULDBLOCK){
+          // 当前的包未发完，但是socket不可写，等待下一次再写出去
 					pthread_mutex_unlock(&mosq->current_out_packet_mutex);
 					return MOSQ_ERR_SUCCESS;
 				}else{
@@ -791,8 +789,9 @@ int _mosquitto_packet_write(struct mosquitto *mosq)
 					}
 				}
 			}
-		}
+		} // end of while packet->process >  0
 
+    // 当前包发送全部发送完毕
 #ifdef WITH_BROKER
 #  ifdef WITH_SYS_TREE
 		g_msgs_sent++;
@@ -801,6 +800,7 @@ int _mosquitto_packet_write(struct mosquitto *mosq)
 		}
 #  endif
 #else
+    // 线程安全的函数
 		if(((packet->command)&0xF6) == PUBLISH){
 			pthread_mutex_lock(&mosq->callback_mutex);
 			if(mosq->on_publish){

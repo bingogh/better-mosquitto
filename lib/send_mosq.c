@@ -284,5 +284,5 @@ int _mosquitto_send_real_publish(struct mosquitto *mosq, uint16_t mid, const cha
 		_mosquitto_write_bytes(packet, payload, payloadlen);
 	}
 
-	return _mosquitto_packet_queue(mosq, packet);
+	return _mosquitto_packet_queue(mosq, packet); //packet都是入队列的，不是一次写出去
 }
