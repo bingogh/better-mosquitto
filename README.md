@@ -3,6 +3,7 @@ better-mosquitto
 Because there are several design in mosquitto are not good enough, so i decide to change it as to train my c.
 
 ## TODO
+- a web interface based on go(and self web framework)
 - libevent error support
 - persist/backup
 - signal handling
