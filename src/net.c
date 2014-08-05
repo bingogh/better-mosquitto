@@ -44,9 +44,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
-#ifdef WITH_WRAP
-#include <tcpd.h>
-#endif
 
 #ifdef __FreeBSD__
 #  include <netinet/in.h>
@@ -102,10 +99,6 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *a
 	char ebuf[256];
 	unsigned long e;
 #endif
-#ifdef WITH_WRAP
-	struct request_info wrap_req;
-	char address[1024];
-#endif
 
   db = args->db;
   base = args->base;
@@ -133,19 +126,6 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *a
 	}
 #endif
 
-#ifdef WITH_WRAP
-	/* Use tcpd / libwrap to determine whether a connection is allowed. */
-	request_init(&wrap_req, RQ_FILE, new_sock, RQ_DAEMON, "mosquitto", 0);
-	fromhost(&wrap_req);
-	if(!hosts_access(&wrap_req)){
-		/* Access is denied */
-		if(!_mosquitto_socket_get_address(new_sock, address, 1024)){
-			_mosquitto_log_printf(NULL, MOSQ_LOG_NOTICE, "Client connection from %s denied access by tcpd.", address);
-		}
-		COMPAT_CLOSE(new_sock);
-		return -1;
-	}else{
-#endif
 		new_context = mqtt3_context_init(new_sock);
 		if(!new_context){
 			COMPAT_CLOSE(new_sock);
@@ -238,9 +218,6 @@ int mqtt3_socket_accept(int listensock, short ev, struct mosquitto_funcs_data *a
 		}
 		// If we got here then the context's DB index is "i" regardless of how we got here
 		new_context->db_index = i;
-#ifdef WITH_WRAP
-	}
-#endif
 
   args->context = new_context;
   event = event_new(base, new_sock, EV_READ|EV_PERSIST, handle_reads_writes, args);

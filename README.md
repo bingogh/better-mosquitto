@@ -2,24 +2,27 @@ better-mosquitto
 ================
 Because there are several design in mosquitto are not good enough, so i decide to change it as to train my c.
 
+## Feature
+
 ## TODO
-- a web interface based on go(and self web framework)
-- libevent error support
+- custom event loop
+- better datastructure
 - persist/backup
 - signal handling
+- a web interface based on go(and self web framework)
 
 ## log
 - 2014.3.31 add libevent support done
 - 2014.3.30 try to add libevent support
 - 2014.3.27 add kqueue support
 
-
-## Feature
-
-
 ## 架构
 
-旧的逻辑，但就消息处理的角度来看，基本上是依靠select的轮训，step1的时候，问一次所有监听的socket，有没内容可以处理。step2，问完后，就把发过来的消息塞订阅了对应话题的客户端自己维护的队列里面。step3，轮训每个客户端，把他们消息队列上面的消息发送出去。然后又来一次新的select轮训。
+旧的逻辑，但就消息处理的角度来看，基本上是依靠select的轮训。
+- step1
+  问一次所有监听的socket，有没内容可以处理。
+- step2，问完后，就把发过来的消息塞订阅了对应话题的客户端自己维护的队列里面。
+- step3，轮训每个客户端，把他们消息队列上面的消息发送出去。然后又来一次新的select轮训。
 
 总的来说，整个程序都是串行起来运行的，逻辑较简单。
 
@@ -37,7 +40,7 @@ Because there are several design in mosquitto are not good enough, so i decide t
 ```
 
 
-## Weakness
+## Known Weakness
 - select event loop
 - most data structure is linked list
   - cost O(n)
